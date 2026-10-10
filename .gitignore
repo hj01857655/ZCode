@@ -1,0 +1,16 @@
+# 上游克隆（自带 .git，不入本仓库）
+repo/
+tools/atomcode-src/
+node_modules/
+.breezell/
+
+# 本地调研笔记（不入公开仓库）
+/CUA-还原调查.md
+
+# Python 产物
+__pycache__/
+*.pyc
+
+# 流量抓包（含提示词/令牌，不入库）
+tools/mitm/llm_*.json
+tools/wire_dump/
