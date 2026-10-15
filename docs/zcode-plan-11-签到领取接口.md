@@ -24,6 +24,8 @@ POST https://zcode.z.ai/api/v1/zcode-plan/billing/claim     → 领取（需阿�
 
 > ⚠️ **领取历史查不到**。`zcode-plan/billing` 只有 `balance` 与 `current` 两个端点，无 history/records/list，
 > 且二者都只返回 `status:"active"` 的实例。详见 §5.3。
+>
+> **入口触发（2026-10-14 逆向闭环）**：领取入口整体由服务端营销触点投放驱动（`GET /api/v1/marketing/touch`，§4）——`deliveries` 空则官方界面不应出现领取按钮；preview 只负责列"投放生效后能领什么"。
 
 ## 1. billing/preview（可领取预览，GET）
 
@@ -113,11 +115,18 @@ if (s !== 0 || !r.data?.plan) {          // ← code 必须为 0 **且** data.pl
 ## 4. UI/RPC 调用链
 
 ```
-横幅 manual-claim-plan-banner（claim 前置状态: used / granted:true / granted:false+next_try_at）
-  → coding-plan-subscription.getManualClaimPlanPreviews()   # 领取按钮渲染
-  → 用户点击「开始体验」→ 弹验证码（configs.captcha）
-  → coding-plan-subscription.claimManualPlan({planId, captchaVerifyParam, captchaRegion})
-  → 成功: 「{plan} 领取成功 / Start Plan 已可使用」→ 刷新 balance/供应商可用性
+服务端投放（入口不是 preview 决定的！）：GET /api/v1/marketing/touch?seq=<n>
+  # host marketingTouchService @124194；头=X-Device-Mid+X-Client-Language+X-ZCode-App-Version+Bearer?
+  # scope 守护：主体中途变化抛 marketing_identity_changed
+  → deliveries 非空才渲染 banner/popup（resource_position + hero 素材走 cloudContentService；
+    动作类型 claim_zcode_plan / open_url；renderer @4621048/@4623540）
+  → 点击先回执 POST /api/v1/marketing/touch/action {campaign_id, action_type}
+  → prepare capability 检查（不过→cancelled/uncertain，marketing_capability_timeout）
+  → 弹验证码（§3 链）拿 param → coding-plan-subscription.claimManualPlan({planId, captchaVerifyParam, captchaRegion})
+  → terminal 码 [1001..1005]；成功:「{plan} 领取成功 / Start Plan 已可使用」→ force 刷新权益 + refresh("marketing-plan-claim")
+preview（getManualClaimPlanPreviews）只列可领套餐；banner 前置状态机 used/granted/next_try_at 见 07 号
+**本机实测（2026-10-14 00:54，logid `20261013165430a4c755b0e7701f857425`）：deliveries:[] + preview plans:[] + balance 全空——服务端此刻没给这个「账号×设备」投任何领取活动，官方界面本不该存在可点的领取入口。**
+边界：deliveries:[] 区分不了"平台无活动"与"有活动但没投给你"（静默排除有 Cosy-MachineToken 类先例）。另：本机官方 host 日志当日零 claim/messages 痕迹；若所见"能点领取且 3012"来自复刻客户端（switch/CE 缓存），其缺官方构建层的 claim 恰该回 3012（37 §8.2 形态），与本账号是否被限无涉。
 ```
 
 同通道的相关方法：`getStartPlanPreview`（client config 内置预览，`unwrapClientConfigStartPlanPreview` 校验 `{planId, name, entitlements[{grantUnits, meter, period, showName, unitType}]}`）、`getOffPeakClientConfig`、`getForceUpdateConfig` 等。

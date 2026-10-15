@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const DIR = 'E:\\VSCodeSpace\\ZCode\\docs';
+const DIR = process.env.ZCODE_DOCS_DIR || path.join(__dirname, '..', 'docs');
 let bad = 0;
 for (const f of fs.readdirSync(DIR).filter(n => n.endsWith('.md'))) {
   const raw = fs.readFileSync(path.join(DIR, f));

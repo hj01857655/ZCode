@@ -1,7 +1,7 @@
 # 39 · 设备指纹分层组成
 
 > 归属：[ZCode Start Plan 逆向分析总览](zcode-start-plan-逆向分析.md)
-> ⚠️ **硬件探测层官方未开源**（2026-09-28 核对）：`HostDetector` / `MachineGuid` / `baseboard` / `ATTR_HOST_ID` / `GetVolumeInformation` 在 `zai-org/ZCode` 中**全部 0 命中**。其中 `HostDetector` 是否真被 CLI 执行，至今无源码可判。详见 [43 官方未开源清单](zcode-plan-43-官方未开源清单.md) §2/§5。
+> ⚠️ **硬件探测层官方未开源**（2026-09-28 核对）：`HostDetector` / `MachineGuid` / `baseboard` / `ATTR_HOST_ID` / `GetVolumeInformation` 在 `zai-org/ZCode` 中**全部 0 命中**。其中 `HostDetector` 是否真被 CLI 执行——**已于 2026-10-14 在 §4.2 尾闭环：无执行路径**。详见 [43 官方未开源清单](zcode-plan-43-官方未开源清单.md) §2/§5 与 [46 号 §4.5](zcode-plan-46-上传面全清单.md)。
 > 证据：`resources\glm\zcode.cjs` 符号追踪 + 本机 `~/.zcode/v2/` 实态 + 外部报告交叉（[38 §3.1](zcode-plan-38-外部报告交叉核对.md)）
 > 实测日期：2026-09-27
 
@@ -107,6 +107,10 @@ dep : @arms/rum-electron@^0.0.3
 - `hostDetector` 在 CLI 中 14 处、`ATTR_HOST_ID` 3 处、`detectResources` 聚合器存在
 - 聚合器签名是 `(e={}) => (e.detectors || []).map(n => n.detect(e))`——**从参数取 detectors**
 - **没有找到 ZCode 侧调用 `detectResources({detectors:[…HostDetector…]})` 的位置**
+
+**闭环（2026-10-14，B 级静态定论）**：全束引用穷举——`detectResources` 6 处、`hostDetector` 14 处，**vendored 带（cjs 13.627M–13.646M）外均为 0**；带外仅有的两处 `defaultResource()` 命中是 OTel SDK 自身 MeterProvider/NodeSDK 构造器兑底（@13674048/@13970673），而 2.x 的 defaultResource 探测器集 = env+serviceInstanceId+process+os，**不含 HostDetector**——machine-id（`MachineGuid`）在 CLI 无任何执行路径可进上传。本问号关闭；另同轮新发现 ZCode 自有 OTLP 模型遥测管线（默认关，属性含 deviceMid/用户身份六件套），见 [46 号 C18](zcode-plan-46-上传面全清单.md)。
+
+**3.15.1 全标识面重扫补强（2026-10-14）**：除 HostDetector 外，L4 族其余关键词在四束+renderer 的引用穷举：`getmac`/`smbios`/`IOPlatformUUID`/`machine-id` 全落 vendored 不执行带；`serialNumber` 命中为 X.509/字体表字段；`hostname` 51 处（cjs）抽样全为 URL/zod 校验噪声，host/main 无身份用途调用——**无任何 hostname/MAC/序列号采集上传面**；另发现新设备风控端点族 SAF（[46 号 A3](zcode-plan-46-上传面全清单.md)），跨重装设备关联能力归它+L3 指纹，不属 ZCode 自有代码。
 
 **结论：CLI 是否真的实例化 `HostDetector`，静态分析无法判定，需运行时追踪。**
 

@@ -2,7 +2,7 @@
 
 > 归属：[ZCode Start Plan 逆向分析总览](zcode-start-plan-逆向分析.md)
 > 对象：[HardworkingChen/zcode-tools · 逆向分析报告-ZCode-智谱.md](https://github.com/HardworkingChen/zcode-tools)
-> 核对日期：2026-09-27
+> 核对日期：2026-09-27；§6 追加 GitHub 搜索面（330 命中）× oh-my-pi #8802 核对，2026-10-13
 
 ## 0. 前提差异（先对齐再比）
 
@@ -43,7 +43,7 @@
 | 桌面端 3.7.7 | `zcode://oauth/callback`（**自定义 scheme**） | — |
 | CLI（zcode.cjs 3.4.0） | — | `https://zcode.z.ai/api/v1/oauth/cli/callback/zai`（**服务端 HTTP**） |
 
-两者都自洽——**CLI 不需要本地监听端口，桌面端需要**。[10 §1.2b](zcode-plan-10-OAuth登录流程.md) 记的"回调是服务端侧的"仅对 CLI 成立，已在文中限定。
+两者都自洽——**CLI 不需要本地监听端口，桌面端需要**。10-14 第三方源码旁证坐实三事：桌面回调协议名实为 **`zcode://zai-auth/callback`**（唤起入口 `zcode://zai-auth/`）；桌面 OAuth 流量走系统代理且**无证书钉扎**（本地 MITM 可解密）。[10 §1.2b](zcode-plan-10-OAuth登录流程.md) 记的"回调是服务端侧的"仅对 CLI 成立，已在文中限定。
 
 ### 2.2 `app.asar` 里没有 `zcodejwttoken` 这一说法
 
@@ -75,7 +75,7 @@
 | `GET /api/biz/subscription/list` | 订阅列表 | [29](zcode-plan-29-支付与订购系统.md) |
 | `GET /api/monitor/usage/quota/limit` | 用量限额 | [03](zcode-plan-03-billing-balance-接口与实调.md) |
 | `GET /api/auth/z/login`（`api.z.ai`） | 业务登录 | [10 §3.1](zcode-plan-10-OAuth登录流程.md) 已有 |
-| 域名 `cdn.zcode-ai.com`、`studio.zcode-ai.com` | CDN / SSH 远程资源 | [25](zcode-plan-25-远程目标.md) |
+| 域名 `cdn.zcode-ai.com`、`studio.zcode-ai.com` | CDN / SSH 远程资源 | [25](zcode-plan-25-远程目标.md)（**10-14 部分实锤：`studio.zcode-ai.com` 已是客户端内网机器面默认 host（`INTRANET_MACHINE_HOST` 可覆盖，12345/zcode + 3850 probe），见 46 号 O2；cdn 待验**） |
 
 > **`POST /api/v1/oauth/token` 已排除（2026-09-28）**：对外部报告声称的「code 直换 token」端点，在 `resources/glm/zcode.cjs`（15.87 MB，0.16.x 线）全量检索 `oauth/token` **0 命中**；全 bundle 仅 3 处 `/token` 字面量，均属 MCP OAuth 的 OIDC 标准库（`grant_type=refresh_token`，见 [23 §2](zcode-plan-23-Hooks与MCP客户端.md)），与 ZCode 自有登录端点无关。CLI 侧不存在该端点，也不存在「桌面端内嵌浏览器走 `/api/v1/oauth/token`」的证据——本机文档的 `cli/init` + `cli/poll` 轮询流（zai）与 bigmodel 本地回调授权码流即为 bundle 内完整的 OAuth 通道（见 [10](zcode-plan-10-OAuth登录流程.md)）。外部报告的此条为**误判**（很可能是拿通用 OAuth 流的 `/oauth/token` 形态套了 ZCode 域名）。
 
@@ -112,6 +112,20 @@
 > 记录此事实是为了标明**边界位置**，非评价。
 
 ---
+
+## 6. 2026-10-13 · GitHub 搜索面核对（用户报 330 命中）
+
+GitHub 代码搜 `X-Aliyun-Captcha-Verify-Param` 约 **330 命中**。判读：**头已广泛外泄，但 330 ≠ 330 个独立来源**——主体是同生态 fork/拷贝与消费方工具。已知集群：**生成链**（D3-vin/Zcode2Api Go、dengyie/zcode2api Python（AGPL，37 §8.2 源头）、zcode-proxy Go 移植——后两者本机副本已随 `e:\VSCodeSpace\ZCode` 清理，可从公开仓重拉）。**10-14 近况核对（dengyie 2.6.4→2.6.8，10-01/02 提交）**：他们与我们同期撞上同一波风控收紧，操作轨迹含大量**外部运行实证**价值的语义——①`3012 风控硬禁用→指数退避冷却`（2.6.4）：证实 3012 存在"硬禁用"形态且业界共识处置=退避零流量；②`429 body 1113=Key 无资源包永久态，别重试快速换号`：1113 三态判据独立佐证；③`风控流量行为整改——对齐 zcode-switch 人节奏`（2.6.5）：行为节奏是判定输入的自供；④`激活时序/strikes 衰减`（2.6.6）：**服务端 strikes 有衰减机制**（惩罚随时间消退的运营侧旁证）；⑤`风控禁用自动换设备重生：新 SKU+新 device_mid+清 installed_at+补跑安装序，重新启用即全新身份`（2.6.8，RISK_AUTO_ROTATE 默认开）——证明**封禁执行维度含设备身份（SKU/installed_at）**、且生态所谓"安装序/激活"即 zcode-switch 那条 event/report 伪造链。⚠ 边界：2.6.8 属**自动轮换设备身份绕风控**，是本档集红线（37 §8.5-C），只作逆向证据引用，不引入不使用。另其 APP_VERSION 已跟进 **3.14.4**（2.6.7）——官方版本号又动（3.14.3→3.14.4→3.15.1），跨文档引用注意。**消费链**（can1357/oh-my-pi、cpa 系插件仓等）。**10-14 新登**：[binggao1230/glm-zcode-2api](https://github.com/binggao1230/glm-zcode-2api)（MIT/Go）——包装的是**付费订阅的 anthropic 端点**（默认 provider `builtin:bigmodel-coding-plan`），不走 start-plan 三道门，所以无验证码/无身份块实现；"凭据零搬运"= 直读本机 ZCode 登录态（文档称 `~/.zcode/v2/config.json`，本机 v2 现无此文件——macOS/版本口径差，待考）；工程面有亮点（0700/0600 原子写+fsync、audit.jsonl 本地审计、fcntl 单例、AI_SETUP.md+skill 的 agent-first 安装、LAN 共享自带口令），但**对无订阅账号同样只会撞 1113，不是 3012 的解**。
+
+**逐项比对 oh-my-pi issue #8802**（Z.AI Coding Plan 登录丢官方 JWT → 1113 后等 30 分钟）：
+
+| 类别 | 条目 |
+|---|---|
+| 互证（4） | balance/quota GET **不受验证码门**，仅 inference 受门（=03/12）；带/不带 ZCode 指纹均 3007——**3007 与指纹无关**（=37 §8.1 分层：param 门前置）；`captcha-retry` 触发源命名（=12 §3 `source`）；配置源 `data.configs.captcha`（=12 §1） |
+| 新增（2） | ① **`omitAliyunCaptchaHeaderFromProviderHeaders`**：防陈旧 token 随 provider 头持久化重放而剪除两头（B 引用，待源码核验后升入 12 号生命周期表）；② 作者对照结论：**指纹必要不充分**；代理换出口≠换信誉，curl-impersonate 换 Chrome TLS≠换 JA3——与 37 §8.2「3012 与 IP/指纹无关」不矛盾（他们卡在 3007 门，未触 body 层） |
+| 待查（1） | issue 摘要有「3.14.4 README 未提 captcha / 现行端点认证不涉及 captcha」说法——疑似作者走付费直连端点后的另一面，**不构成与本档集矛盾**（本档 3007/3012 均在 zcode-plan 代理实测），需读其仓库代码定性 |
+
+边界重申（§4）：330 命中中含绕过类/批量化操作工具，本文档集仅引其协议证据，不引入代码与操作流程；对这类工具的阅读仅限提取 ZCode 行为旁证（已归 §2.1），不对其本身作形态/链路/代码展开。
 
 ## 5. 核对方法（可复用）
 

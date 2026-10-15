@@ -14,3 +14,7 @@ __pycache__/
 # 流量抓包（含提示词/令牌，不入库）
 tools/mitm/llm_*.json
 tools/wire_dump/
+dist/
+dist.zip
+re/zcode-3.14.5-extracted/
+re/conpty_evidence/conpty_console_list.node

@@ -746,6 +746,7 @@ SDK 的四张路由表藏在 `Ft`（= `Kt`）下，全部按 `verifyType` 二级
 
 - 这批主机**自带 `-pre`**，与 §5l.1 的业务端点不同源——设备通道在生产也指向预发域名（阿里云侧设备指纹服务的历史遗留）。
 - 另有 `secEndpointType === "shpl"` 时走 `shplEndpoints[verifyType][region]`，与默认 `endpoints` 是两套表；ZCode 走默认路径。
+- **main 观察面白名单（`ET`，@1952）比 SDK v1.3.4 表宽**：多出 `cloudauth-device-dualstack.cn-shanghai` / `.ap-southeast-1` 与 `ap-southeast-1-ga.device.saf`（共 9 主机）——为 §5n `[captcha-network]` 观测子系统的匹配集（只分类记录，不改写不上传）；亦印证这批域名就是同一设备通道的端点族（新 SDK 版可能启用 dualstack/ga 路由）。
 
 ### 5l.3 应用身份 `appName` / `appKey`
 
@@ -984,7 +985,7 @@ AaduaneId=111jdk439dJJIjd023823201&Action=InitCaptcha&DeviceToken=<uuid>
 
 **第一次发失败暴露了一个此前没记的参数归属**：`SceneId` 不在 `en()` 的输出里，而在 `In({SceneId}, …)` 的初始入参中（`en()` 只做追加）。漏掉它时服务端回的是**业务错误** `Code:"IllegalScene"` / `"Bad request. The scene is invalid."`——**不是** `SignatureError`，说明签名已通过。判读要点：拿到 `IllegalScene` 说明协议层已经打通，别去查签名。
 
-**尚未验证的分支**：`Success:true` 但 `CaptchaType:TRACELESS`，所以 `LimitFlow` / `LimitedFlowToken`（限流分支）、`403 + x-auth-msg`（`Vr()` 的转换）、`ThrottlingByStrategy` 三条错误路径**本轮均未触发**——它们的判读逻辑（[§5g.4](#5g4-两条通道的响应解析)）仍属静态结论，无实测佐证。
+**尚未验证的分支**：`Success:true` 但 `CaptchaType:TRACELESS`，所以 `LimitFlow` / `LimitedFlowToken`（限流分支）、`403 + x-auth-msg`（`Vr()` 的转换）、`ThrottlingByStrategy` 三条错误路径**本轮均未触发**——它们的判读逻辑（[§5g.4](#5g4-两条通道的响应解析)）仍属静态结论，无实测佐证。**静态补强（10-14）**：main 入口/host/cjs 三束字面量扫描，`LimitFlow`/`LimitedFlowToken` 在 main/host 自有代码 **0 命中**（仅 SDK 响应面消费，§5e/§5l）——限流分支无客户端分流逻辑，纯服务端开关；缺的只有一份限流实包。
 
 ### 5m.3 动态包的真实 CDN（修正 §5e 的混淆）
 

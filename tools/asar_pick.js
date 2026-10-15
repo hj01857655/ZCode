@@ -3,15 +3,16 @@
  * 最小 asar 读取器 —— 只解析头部 + 按需抽取文件，不解包整个 archive。
  * asar 布局：4B|4B|4B|4B pickle 头 → JSON 目录 → 8 字节对齐的文件内容
  *
- *   node _re/asar_pick.js list [关键字]
- *   node _re/asar_pick.js get  <路径> [输出文件]
- *   node _re/asar_pick.js find <关键字>
+ *   node tools/asar_pick.js list [关键字]
+ *   node tools/asar_pick.js get  <路径> [输出文件]
+ *   node tools/asar_pick.js find <关键字>
  */
 const fs = require("fs");
 const path = require("path");
 
+// 2026-10-13：3.15.1 起安装迁移至机器级 Program Files（旧 %LOCALAPPDATA%\Programs\ZCode 已清空）
 const ASAR = process.env.ASAR_PATH ||
-  "C:\\Users\\12925\\AppData\\Local\\Programs\\ZCode\\resources\\app.asar";
+  "C:\\Program Files\\ZCode\\resources\\app.asar";
 const [cmd, ...rest] = process.argv.slice(2);
 
 if (!fs.existsSync(ASAR)) { console.error("找不到 " + ASAR); process.exit(1); }

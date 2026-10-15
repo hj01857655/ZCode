@@ -129,7 +129,7 @@
 | 1006 | ProviderNotConfigured | 否 | 本地配置态，非服务端 |
 | **3101 / 3103** | **off-peak 任务创建失败类别**（eligibility / quota） | — | 2026-09-28 自 host asar schema 静态提取（B 级）：`errorCategory ∈ {client_validation, eligibility_3101, quota_3103, network, invalid_response, local_persist, unknown}`，`failureStage ∈ {client_validation, ticket_request, local_persist}`——见 [06 §8](zcode-plan-06-off-peak档位.md) |
 
-注意：`3012` **不在此映射表**——HTTP 405 承载、走默认处理路径（终定性见 §8.2）；`1010`/裸 429 是网关层码，也不在此表。验证码侧另有三层未触发分支（`LimitFlow`/`403 + x-auth-msg`/`ThrottlingByStrategy`，[12 §5g.4](zcode-plan-12-阿里云验证码体系.md)）——与业务码限流族是**两个不同层**，撞上限流时先分清是哪一层。
+注意：~~`3012` 不在此映射表~~（**2026-10-13 更正：在**）——桌面 renderer 侧有全量归类表 **`G1e`**（rstyles @1221459，39+ 条），cjs 的 `Cs` 18 条只是子集。新增关键读数：**`3012 → invalid_request`（非 rate_limited！无重试语义）**、**`3007 → auth_failed`**、`3002/3008/3009/3010/429 → rate_limited`、`1302/1303/1305 → rate_limited(可重试)`、**`1309 plan_expired`**、**`1311 plan_access_denied`**、**`1312 provider_overloaded`**、1308/1310/1313–1321 `quota_exhausted`、`2007 server_error`、`1213/1301 invalid_request`、`1214 model_not_found`；另有 `W1e`=四个 plan 通道集合{zai/bigmodel × individual/startPlan}（[01 号矩阵](zcode-plan-01-计划体系与供应商标识.md)的 UI 侧实据）。`1010`/裸 429 仍属网关层。验证码侧另有三层未触发分支（`LimitFlow`/`403 + x-auth-msg`/`ThrottlingByStrategy`，[12 §5g.4](zcode-plan-12-阿里云验证码体系.md)）——与业务码限流族是**两个不同层**，撞上限流时先分清是哪一层。
 
 ## 3. 额度桶路由
 
@@ -269,7 +269,8 @@ Get-ChildItem tools\                    # 能力是否已有人写过？
 | `tools/asar_symbols.py` | app.asar 自有代码名字符串检索器（41 号线索） |
 | `tools/cluster_symbols.py` | zcode.cjs 保留函数名的子系统分类器（41 号） |
 | `captcha_node/solver.js`（文件已删除） | 无浏览器验证码求解器（happy-dom 加载真实 SDK）。§8 的 param 产出改由 `tools/e2e_captcha_gate.py` 内部调用同类逻辑完成，**可复跑路径以它为准** |
-| `tools/e2e_captcha_gate.py` | **端到端实锤**（§8.2）：solver 出 param → 装配官方身份块 + 15 个 `X-*` 头 → POST messages。**§8.3 的 200 由它产出，可复跑** |
+| `tools/e2e_captcha_gate.py` | ~~端到端实锤（§8.2）~~ **2026-10-13 已坏死**：dengyie 依赖目录整体删除，param/身份块/请求体三处均不可得；复跑面见 `tools/e2e_startplan_gate.py` 与 §8.5 |
+| `tools/e2e_startplan_gate.py` | **3.15.1 重建版门测**：A 裸 body 反向验 3012、C 付费 x-api-key 验认证面，B 正向复用 `probe_claim.solve`；2026-10-13 实跑结果见 §8.5 |
 | `_re/asar_pick.js` | app.asar 按需抽取与全包关键词扫描（`list`/`root`/`get`/`find`，**311 MB 上全文正则会超时**）。用法：`node _re\asar_pick.js find <关键词>` |
 | `_re/captcha_window.js` | 按时间窗打印 captcha 事件链，定位 `instance_timeout`。`node _re\captcha_window.js 2026-09-27 02:59:20 22` |
 | `_re/rollout_shape.js` | 打印 rollout JSONL 结构（顶层键 / response 字段 / messages 的 role 分布） |
@@ -377,6 +378,8 @@ node solver.js 11xygtvd sgp no8xfe   → exit 0, VERIFY_PARAM=<base64>
 
 **即：「换构建层能通」是本地实测的；「哪一处起决定作用」是采信上游实现的结论。** 若要拆到子因粒度，需在 `transform_body()` / `build_identity_headers()` 上逐项开关做 A/B——**未做**。这不影响修复有效性（整体采纳即通），但影响"能不能据此推断别的场景"。
 
+**适用限定（2026-10-14）：本节全部对照都发生在持有 active 套餐的请求上——「构建层三因」只对有资格主体的 3012 成立；无套餐形态下 3012 与网关对无资格请求的正常拒绝完全相容且从未做过对照，不可外推（现状收敛见 §8.5）。
+
 **e2e 决定性实锤（2026-09-27，`_re/e2e_captcha_gate.py`，可复跑）**：同一 JWT（尾号 `diMrc8`，即此前每轮必 3012 的账号）、同一本机出口、同一 solver 现解 param（region=cn），请求体与头集改由 dengyie 真实现装配——`body_transform.transform_body()`（官方身份块 4 块 + cache_control + `metadata.user_id`）+ `identity.build_identity_headers()`（pio 全集）+ `build_trace_headers("start-plan")` 三件套 + 成对验证码头——直打 `POST /api/v1/zcode-plan/anthropic/v1/messages`：**HTTP 200**，模型正常回复。三轮对照终于闭环：变量收敛到「请求体构建层」单一点，3012 → 200。附注：模型名大小写敏感，`glm-4.6` 会报 `400 code 3006 model not allowed`；本账号可用 `GLM-5.3-Flash` / `GLM-5.3`（`zcode2api-dengyie/app/constants.py` `AVAILABLE_MODELS`）。
 
 ### 8.3 独立复现（2026-09-27 16:09，两连 200）
@@ -414,8 +417,42 @@ node solver.js 11xygtvd sgp no8xfe   → exit 0, VERIFY_PARAM=<base64>
 
 - **V4 请求签名的端到端验证**（2026-09-27，`tools/v4_sign_e2e.py`）：签名环实现侧全环可跑（握手→HKDF→解包→Ed25519→PoW→7 头），gate 不可用时服务端**不校验签名头**（两组归一化一致）。gate 开启态无载体且客户端不可达（不伪造权益）——开通付费订阅后先跑 `tools/probe_sig_gate.py`。
 - **服务端权限类门控**（`entanglement` / `agent_teams` / superMemory 配额）——由 `getUserInfo` 下发并周期刷新，属账号侧权益，本文只记录判据不作处理。
-- **3012 的具体触发条件**（2026-09-27 定论并闭环）：业务请求体缺官方 system 身份块（主因）+ `metadata.user_id` 形状错 + 客户端头透传泄漏，与验证码/JWT/IP/账号标记无关——见 §8.2 终定性 + e2e 决定性实锤（同 JWT 同出口同 param，仅换 dengyie 请求构建层 → 3012 变 200）。原「JWT 入 D3-vin 账号池 A/B」作废。**已两次独立复现 200（§8.3）。**
+- **3012 的具体触发条件**（2026-09-27 定论 + **2026-10-14 范围收紧**）：构建层三因（缺官方 system 身份块为主因 + `metadata.user_id` 形状 + 头透传泄漏）**仅对持有有效授权的请求被证实**（当时同 JWT 同出口换构建层 3012→200，§8.2/8.3）；无套餐形态下 3012 与网关对无资格请求的正常拒绝完全相容、从未做过对照，**不可外推**。本号当前定性收敛于 §8.5（三候选未决）。原「JWT 入 D3-vin 账号池 A/B」作废。
 - **Sparkle(mihomo) 侧改动是否为 3012 的成因**——**未验证**。本机在 `work/config.yaml` 加过 `aliyuncs.com`/`alicdn.com` 直连与 `fake-ip-filter`，但按 §8.2 终定性它不构成解释（真因在请求体层）。**该改动的作用是修 `Captcha instance timed out`（见 §9），与 3012 无关——两件事不要混谈。**
+
+### 8.5 3012 现状收敛（2026-10-14：机制模型 · 定性 · 判别 · 工具链）
+
+> 本节取代此前 10-13/10-14 的四个流水段（复跑记录/勘误/成因链/机制模型），一次性收敛到当前认知；证据锚点保留，旧段落不再单独存在。
+
+**A. 官方防御面机制模型（G1e 错误码表实据，rstyles @1221459，B 级；逐行证据见标注）**
+
+| # | 官方做了什么 | 证据 |
+|---|---|---|
+| 1 | 仅推理路由设门：`zcode-plan/anthropic` 走三道门；balance/preview/付费直连不过前两道 | A：10-13/14 实测 balance/preview 200 而 messages 拦；外部互证 oh-my-pi #8802 |
+| 2 | 门①验证码：缺/错 param → `3007`，G1e 归 `auth_failed`（官方视角=身份失败） | A：3007 实测；B：G1e |
+| 3 | 门②异常拦截：`3012`（HTTP 405 承载），G1e 归 **`invalid_request` 而非 `rate_limited`**——官方口径「请求无效、重试无意义」，客户端全束**无任何 3012/unusual/waf 处理代码**（host/mchunk/main/rstyles 扫描 0），即网关层封禁、非产品概念 | B：G1e + 扫描。~~「官方客户端也吃 3012」~~ **10-14 撤回**：本机官方 host 日志无 messages/claim 痕迹，仅口头报告，不成证据 |
+| 4 | 门③限流族：`3002/3008/3009/3010/429→rate_limited`（1302/1303/1305 可重试），与 3012 分层 | B：G1e |
+| 5 | 计费族独立：`1005/1304/1308/1310/1313–1321 quota_exhausted`、`1309 plan_expired`、`1311 plan_access_denied`、`1312 provider_overloaded`——**空套餐的表现是这一族，不是 3012** | B：G1e；A：1113 实测 |
+
+**B. 本机 3012 定性（截至 10-14）：三候选未决，"拉黑"不是定论**
+
+变量时间链（全部本机实据）：09-27 两连 200（§8.3，旧环境旧身份）→ 09-27/28 同 JWT 高频对照实验 → **10-10 机级重装**（deviceMid 全新 `760d5418…`、`~/.zcode` 整层重建：logs/db/rollout 均从 10-10 起）→ **10-12 重新登录**（credentials birth，旧 JWT 换代）→ 10-13 起 messages 3012；同期 `hosts` 留有 09-27 的 `logguard` 条目（钉 `cloudauth-device-pre`=设备通道 cn 主端点，备用 saf 端点未钉——**降级路由非完全断流**；log_guard bundle 补丁已随重装恢复，manifest 验毕）。~~第三方 relay 域名~~ 10-14 机主确认与风控无关，剔除（观察记录留 `~/.zcode/relay-debug.log`）。
+
+三个存活候选：① **账号维度标记/冷却窗口**（09-27 起实验流量史 +「无套餐打 plan 通道」的正常拒绝——后者与封禁**完全相容且更简单**，历史 3007/3012 对照全在有套餐时做，无套餐形态从未对照过）；② **设备/出口信誉**（logguard 污点 + switch/CE 多形态画像；「机器封=全账号连坐」**未证实未证伪**：A 级反证=09-27 同机他号 200；**禁止换号交叉验证与伪造 deviceMid/指纹**——红线，且会把画像做实）；③ **新身份冷启动**（全新 deviceMid+新 JWT+旧 IP，随正常使用自解）。**外部运行实证旁证（10-14，dengyie 2.6.4→2.6.8 近况，详 38 §6）**：同一时窗（10-01/02）全网撞上同波收紧——其提交语义坐实 3012 存在硬禁用态（业界处置=指数退避零流量，与 C-① 同路）、**strikes 有衰减机制**（静置有效的运营侧佐证）、封禁执行维度含设备身份 SKU/installed_at（其 2.6.8 的自动换身份重生即针对此维——**属绕风控红线，只作证据不作风法**）。
+只读旁证（10-14 00:54）：`billing/balance`、`billing/preview` 200 且**双空**；`GET /api/v1/marketing/touch` `deliveries:[]`（logid `20261013165430a4c755b0e7701f857425`）——官方领取入口按投放驱动，当前无投放；`x-api-key` 付费通道 429/1113（认证 OK 缺订阅）。**即：本机当前处「无资格 + 无投放」状态，任何"封禁"读数在此状态下都不可解释为确定。**
+
+**C. 判别程序（成本升序，每步一次；前置：删 hosts 的 logguard 行恢复上报）**
+
+1. **等资格**：新批次投放（只读盯 `probe_claim.py probe`/marketing touch，零风险）或订阅付费档 → 有资格后**官方客户端**发一条极小消息。通 → 此前 3012=无资格正常拒绝，案结；仍 3012 → 步 2。
+2. **换出口**（手机热点）再一条：通 → IP 信誉/CC 滑窗（静置自愈）；不通 → 步 3。
+3. **工单定论**：官方反馈入口（打包 `~/.zcode/v2`+rollout，自动附现场），正文带 logid 时间序列（`20261013150520…`、`20261013151100…`、`20261013164901…`、`20261013165430…`），并主动交代 logguard 历史与重装时间线。只有服务端能回答"标没标、标在哪一维、何时解"。
+
+**D. 复跑与工具链现状（全离线，勿叠 live）**
+
+- 身份块构建层：**从未丢失**——官方装配器在 3.15.1 cjs 全存活（`kla/Kvn`@4936918、`Vla`@4940531、`Qvn`、`Jvn/Ydo/Ela` 常量带），已提取为 `tools/zcode_system.json`+装配自检过（`system_blocks=3`、first_head 逐字匹配、metadata 键集={account_uuid,device_id,session_id}）；builder 原始切片已清（一次性中间产物，10-14），可从 cjs @4.93–4.94M 带重抽（`grab.js`）。
+- e2e：`tools/e2e_captcha_gate.py` 已坏死（dengyie 依赖清理），继任 `tools/e2e_startplan_gate.py`（A 裸 body/C 付费直连；`--with-identity` 缺省零流量装配、`--send` 才发）。10-13 实跑：A=405/3012（反向复现成立）、C=429/1113（认证层 live）。
+- solver：`captcha_solve.js` 已加 SDK 候选回退（`CAPTCHA_SDK` > 新样本 > 旧 v1.3.4 同版本样本）+ happy-dom 已装；**对新 224,977 B SDK 三连 100s 超时未解**（§5n 的 F008/资源校验与 §9 的 mihomo 直连修复现不在线，属已知抖动，等资格期不重试点火）。
+- 工具坑（本方法论级）：`Select-String -SimpleMatch` 对 14MB 单行 minified 计数失真（曾误报 `Agent Identity=0`）——一律用 `count_strings.js`/`grab.js`（indexOf 法）；vendored 词汇不算目标程序行为（43/45 号模块 4 教训）；grep 命中≠证据（§9 闸门）。
 
 ## 9. 本地日志观察渠道（2026-09-27 实测）
 

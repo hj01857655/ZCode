@@ -77,6 +77,7 @@ account:zai-individual-coding-plan      account:bigmodel-individual-coding-plan
 account:zai-team-coding-plan            account:bigmodel-team-coding-plan
 account:zai-start-plan                  account:bigmodel-start-plan
 account:zai-offpeak-idle-plan           account:bigmodel-offpeak-idle-plan
+account:zai-highspeed-card              account:bigmodel-highspeed-card
 ```
 
 **分界线是"凭据 → 网关域"，不是套餐。** 实测两向互打均为 `401`——不是权限不足，是路由不通：
@@ -258,6 +259,7 @@ connectionKey = sha256(JSON.stringify([
 | `account:zai-individual/team-coding-plan` | `https://api.z.ai/api/anthropic` | GLM-5.3, GLM-5.3-Flash |
 | `account:bigmodel-individual/team-coding-plan` | `https://open.bigmodel.cn/api/anthropic` | GLM-5.3, GLM-5.3-Flash |
 | `account:zai/bigmodel-offpeak-idle-plan` | `https://zcode.z.ai/api/v1/off-peak/anthropic`（hidden） | GLM-5.3, GLM-5.3-Flash |
+| `account:zai/bigmodel-highspeed-card` | 待观察——仅见于装机配置 `providerId × modelId` 启用映射（[44 §4.1](zcode-plan-44-3.15.1机级安装与配置层.md)），无同名模板/网关字面量 | 启用集见 44 §4.1 同文件 |
 
 凭证分配（`AccountProviderRequestAuthService.resolveCurrent`，host）：start-plan → `zcodejwttoken`；individual → 该账号 API key；team → 运行时投影的项目 key（`{id}.{secret}`）。
 

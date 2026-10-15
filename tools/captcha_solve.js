@@ -6,13 +6,20 @@
 //     -> success 回调第一个参数即 param
 //
 // DEBUG=1 时打印 SDK 发出的请求 URL 与响应状态。
-// 用法：node tools/captcha_solve.js
+// 用法：node tools/captcha_solve.js            # 自动选SDK：CAPTCHA_SDK env > aliyunsdk新样本 > 旧 v1.3.4 样本
+// 背景（37 §8.6）：新样本（224,977 B）上 happy-dom 三连 100s 超时；旧 v1.3.4（273,948 B）是 12 号 §5m.13 A 级跑通用的同一版本
 // 输出：单行 JSON {ok, param?, verifyCode?, certifyId?, msg?}
 const fs = require("fs");
 const path = require("path");
 const { Window } = require("happy-dom");
 
-const SDK = path.join(process.env.TEMP || "C:\\Users\\12925\\AppData\\Local\\Temp", "aliyunsdk", "AliyunCaptcha.js");
+const TMP = process.env.TEMP || "C:\\Users\\12925\\AppData\\Local\\Temp";
+const SDK_CANDIDATES = [
+  process.env.CAPTCHA_SDK,
+  path.join(TMP, "aliyunsdk", "AliyunCaptcha.js"),
+  path.join(TMP, "aliyun_captcha.js"),
+].filter(Boolean);
+const SDK = SDK_CANDIDATES.find((p) => fs.existsSync(p)) || SDK_CANDIDATES[0];
 const SCENE = "11xygtvd";
 const PREFIX = "no8xfe";
 const REGION = "cn";

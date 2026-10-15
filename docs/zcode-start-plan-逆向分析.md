@@ -1,7 +1,7 @@
 # ZCode "Start Plan" 逆向分析 · 总览与索引
 
 > 调查日期：2026-09-26
-> 对象：ZCode Desktop 3.14.3（Windows）+ 内置 CLI（resources/glm/zcode.cjs）
+> 对象：ZCode Desktop 3.14.3（Windows）+ 内置 CLI（resources/glm/zcode.cjs）；**当前安装 2026-10-10 已迁移：`C:\Program Files\ZCode` · `@zcode/desktop` 3.15.1（机级），全量复验与 3.15.1 新配置面见 [44](zcode-plan-44-3.15.1机级安装与配置层.md)**
 > 性质：本机软件与内置 bundle 静态分析；阿里云验证码部分**已扩展为实包验证**（真实调用 `InitCaptcha` 成功、动态包已抓取解析，见 [12 §5m](zcode-plan-12-阿里云验证码体系.md)）。本机账号凭证以脱敏引用记录，SDK/客户端静态常量按原值记录（见 [12 §5c](zcode-plan-12-阿里云验证码体系.md)）
 
 ## 0. 一句话结论
@@ -67,12 +67,15 @@
 | [35-输出样式系统](zcode-plan-35-输出样式系统.md) | Output Style 注入机制、与 AGENTS.md 的分工 |
 | [36-Bots投递体系](zcode-plan-36-Bots投递体系.md) | botDeliveryTarget、automation/off-peak 互斥、本机未配置 |
 | [37-排障手册](zcode-plan-37-排障手册.md) | **方法论 + 实测矩阵**：端点 × 认证头判别、错误码速查（401/1113/3006/3007/3012/403）、额度桶路由、多号身份核对；含一次完整误判复盘（一个笔误伪装成五个问题）与三道已落地的闸门。**§8 记验证码→3007→3012→200 全链路实测闭环。排障前先读** |
-| [38-外部报告交叉核对](zcode-plan-38-外部报告交叉核对.md) | 与 [HardworkingChen/zcode-tools](https://github.com/HardworkingChen/zcode-tools) 报告的逐项比对：6 处相互印证、3 处冲突（多为**产物差异非矛盾**）、6 个本文档未收录的端点、指纹四层 |
+| [38-外部报告交叉核对](zcode-plan-38-外部报告交叉核对.md) | 与 [HardworkingChen/zcode-tools](https://github.com/HardworkingChen/zcode-tools) 报告的逐项比对：6 处相互印证、3 处冲突（多为**产物差异非矛盾**）、6 个本文档未收录的端点、指纹四层。**§6 新增 2026-10-13**：GitHub 代码搜 `X-Aliyun-Captcha-Verify-Param` ≈330 命中（生成链/消费链集群拆分）× oh-my-pi #8802 逐项比对（4 互证含「balance 不受验证码门」，新增 `omitAliyunCaptchaHeaderFromProviderHeaders` 待源码核验） |
 | [39-设备指纹分层](zcode-plan-39-设备指纹分层.md) | L1 `deviceMid`（随机 UUID）/ L2 登录态 / L3 阿里云指纹 / L4 **硬件层标识**——外部报告「ZCode 不读硬件指纹」的核对结果（拆 `app.asar` 全包确认成立）、误命中清单、可执行检查 |
 | [40-反馈日志打包与上传](zcode-plan-40-反馈日志打包与上传.md) | 反馈工单 vs 导出日志两条路径；前者**全量打包** `~/.zcode/v2` + `cli/rollout`（全部聊天）+ `tasks-index.sqlite` + `about.txt`。含外部 `log_guard` 补丁的**符号映射表**（3.9.1→3.14.3）与本机 fuse 核对 |
 | [41-未探索子系统地图](zcode-plan-41-未探索子系统地图.md) | **长尾定量**：bundle 长名 20,753 中约一半为 vendored TS；自有面 10,936、文档触达 2.1%、零触碰家族 7,902——按家族列出的未开挖子系统清单与建议顺序 |
 | [42-AppAsar自有面地图](zcode-plan-42-AppAsar自有面地图.md) | **asar 前线**：8 束自有长名 10,957、触达 4.4%；飞书/微信 Bot 通道实体、独立 scheduler 进程、ARMS 上报、CUA helper 安装体系——36/06/17/22 号的 host 侧证据 |
 | [43-官方未开源清单](zcode-plan-43-官方未开源清单.md) | **`zai-org/ZCode`（Apache-2.0）产物 vs 源码逐符号对照**：V4 签名、领取、硬件探测层、企业计费、验证码 param 生成**一行都没有**；支付侧 51.7 KB 完整开源。仓库仅 3 个提交，**`git log -S` 无法判断是否删过代码**。05/39 的主题在此登记为「无官方答案」 |
+| [44-3.15.1机级安装与配置层](zcode-plan-44-3.15.1机级安装与配置层.md) | **2026-10-13 全量复验**：安装迁至 `C:\Program Files\ZCode`（3.15.1，`.zcode-install-manifest` 1108 条 ↔ 磁盘逐条一致，无重打包痕迹）；1,477 标识符验尸——真实协议漂移仅四条（OAuth 命名族改名 `createCliOAuthClient`/`CliOAuthError`、`UNSIGNED_PATHS` 连续缺席、URL 字面量→配置模板驱动、计费/领取维持收敛 host）；新明文面 `resources/config/provider/zcode-builtin.json`（revision 31，14+ 三方供应商模板、`*-highspeed-card` 新家族）与 `resources/glm/packages/` 装器直装 16 插件、`resources/tools/` cua-helper + ugrep |
+| [46-上传面全清单](zcode-plan-46-上传面全清单.md) | **汇总收口**：客户端上传数据的全通道矩阵（C1-C20 一方 + A1-A3 阿里云风控 + O1/O2 观察面），逐行标端点/时机/字段/证据级/出处；设备数据专列（deviceMid 的 4 条出现路径、工作区绝对路径上行走 C3+C14、公网 IP 经 DeviceConfig 回写再回报）；**不上传清单**（硬件标识、凭据明文、遥测脱敏黑名单）；口径冲突 6 条已并记/已闭环 |
+| [45-闭源六模块深潜](zcode-plan-45-闭源六模块深潜.md) | **43 号清单逐符号在 3.15.1 五束落位并还原**：模块 2/3 完整拿下（钉定值 Apple TeamID `8A5X4JJ39T`、buildId `pipeline-304023-f18d6db7`、内网默认下载源、codesign/TCC 校验链、领取协议 + `failureEndsAt` 冷却语义）；模块 4/5/6 **改判**（OTel vendored、误报符号、测试 client 消失）；模块 1 维持闭源定性（细节在 05） |
 
 辅助脚本（`tools/` 为 Python 侧、`_re/` 为 JS bundle 逆向侧；**排障时先看 [37 排障手册 §6](zcode-plan-37-排障手册.md)**）：
 
@@ -83,18 +86,20 @@
 | `tools/list_plans.py` | 列出当前账号的套餐与额度桶（含已用/可用/优先级） |
 | `tools/dump_creds.py` | 完整导出凭据，按用途标注认证头与端点，自动解 JWT payload |
 | `tools/find_by_tail.py` | 按 token 尾部指纹反查是哪一把 |
-~~`tools/zcode_bridge.py`~~（**已清理**；桥接结论见 §7，功能已由 `tools/e2e_captcha_gate.py` 覆盖） |
-|---|---|
-| `zcode_decrypt.py` | 本地解密 credentials.json（`--out` 可导出解密结果） |
+| `tools/zcode_decrypt.py` | 本地解密 credentials.json（`--out` 可导出解密结果） |
 | `call_balance.py` | 用解密出的 `zcodejwttoken` 实调 balance 接口 |
 | `tools/v4_handshake.py` | V4 握手复现（05 §2/§3/§8）：`--self-test` 离线 6 断言；`--live` / `--api-key {id}.{secret}` 重拍握手环 |
 | `mine_model_io.py` | model-io 日志结构化挖掘（37 §9）：真实观测/会话文本污染分流，阴性证明可重跑 |
 | `cluster_symbols.py` | bundle 长名聚类（41 号）：官方 TS 差集剔 vendored → 自有面家族地图，`--family` 可下钻 |
 | `asar_symbols.py` | app.asar 自有面扫描（42 号）：头解析按需读 8 束，不解包 311MB；TS 差集 + 聚类 |
-| `tools/e2e_captcha_gate.py` | start-plan 全链 e2e 门测：现解 param + 官方构建直打 messages（37 §8.2） |
+| `tools/e2e_captcha_gate.py` | start-plan 全链 e2e 门测：现解 param + 官方构建直打 messages（37 §8.2）——**2026-10-13 已坏死（dengyie 依赖删除），继任见下行** |
+| `tools/e2e_startplan_gate.py` | 3.15.1 重建版门测：A 裸 body 反验 3012 / C 付费 x-api-key 验认证 / B 正向复用 `probe_claim.solve`；实跑结果 37 §8.5 |
+| `tools/zcode_system.json` | 身份块官方文本资产（cjs `kla/Kvn/Vla/Jvn/Ydo/Ela` @4936056–4941810 提取，含装配规则与偏移）；配合 `e2e_startplan_gate.py --with-identity` 零流量装配、`--send` 才发（37 §8.5-D） |
 | `tools/v4_sign_e2e.py` | V4 签名环 A/B 实测（05 §8 末）：签名实现 vs 不带签名头，归一化对比 |
 | `tools/probe_sig_gate.py` | gate 状态探针：开通付费订阅后先跑它确认 gate 是否开启 |
-| `_re/asar_pick.js` / `_re/ctx.js` | 从 app.asar 按需抽取（不整包解）/ 抽取关键词上下文 |
+| `_re/asar_pick.js` / `_re/ctx.js` | 从 app.asar 按需抽取（不整包解）/ 抽取关键词上下文（**2026-10-13：两工具默认路径已改 3.15.1 机级安装，`ASAR_PATH`/`ZCODE_CJS` 可覆盖**） |
+| `tools/reverify_build.js` | 构建产物全量复验（44 §2）：docs 反引号标识符 → 新构建逐 token 验尸，cjs/asar/host 三面存活矩阵 + 协议级计数报告（`tools/_reverify_*.md`） |
+| `tools/count_strings.js` | 多文件×多模式子串计数（44 §3/§4）：存活/迁移/去向判别；内置目标集 cjs/host/cfg/log/setting，`--add <pat>` 可扩 |
 | `_re/extract_web_aes_secret_key.js` | 阿里云验证码 SDK 静态加密层提取：抠字符串表 → 执行解码器 → 去混淆 → 定位配置 → 解密，用法 `node extract_web_aes_secret_key.js [js路径]` |
 | `_re/tables.js` / `_re/deobf.js` | JS bundle 字符串表解码器（`G`/`er`）/ 批量去混淆器，对同款 obfuscator.io bundle 通用 |
 | `_re/verify_decrypt.js` | 还原结果的 PKCS7 回环校验与交叉验证 |
@@ -131,7 +136,7 @@
 | 凭证 `enc:v1` 可本地解密 | 02 | `tools/zcode_decrypt.py` | 自带对拍 |
 | balance 接口 200 + 响应解析 | 03 | `tools/call_balance.py`、~~`tools/poc_e2e.py`~~（已清理，功能由 `tools/e2e_captcha_gate.py` 覆盖） | 只读 |
 | 端到端最小聊天请求 | 08 | ~~`tools/poc_e2e.py`~~（已清理，功能由 `tools/e2e_captcha_gate.py` 覆盖） | 一次极小调用 |
-| **e2e 全链决定性实锤（3012→200）** | 08 §1.8 / 37 §8.2 | `tools/e2e_captcha_gate.py`（可复跑） | 构建层修正后模型正常回复；模型名大小写敏感 |
+| **e2e 全链决定性实锤（3012→200）** | 08 §1.8 / 37 §8.2 | ~~`tools/e2e_captcha_gate.py`~~（2026-10-13 坏死：dengyie 依赖删除；复跑面 = `tools/e2e_startplan_gate.py`） | 09-27 构建层修正后 200；模型名大小写敏感；**10-13/14 复跑：A=3012 反向复现、C=认证层 live；正向 200 待资格（balance/preview/touch 三空），构建层从未丢（`zcode_system.json`）；本号 3012＝三候选未决，收敛 37 §8.5** |
 | 阿里云 `InitCaptcha` 成功 | 12 §5m.2 | `_re/send_init_captcha.js` | 13 参数 + `Cr()` 签名 |
 | 验证码 SDK 静态加密层 | 12 §5c | `_re/extract_web_aes_secret_key.js` + `verify_decrypt.js` | PKCS7 回环 |
 | DeviceConfig 9 字段 | 12 §5d | `_re/decode_device_config.js` | 带 `--selftest` |
@@ -152,11 +157,11 @@
 
 那 24 篇（UI、工具、IPC、存储、子代理等）**弱标记全为 0**，因为它们是**纯静态读码**（B 级）——不涉及协议，不打服务端。这是合理取舍，但**文档里没有一处标注这一点**，容易被误读成实测。本表即为该声明。
 
-- `resources/glm/zcode.cjs` — CLI 主 bundle（压缩混淆，`r(fn,"name")` 保留大量原始函数名）。**2026-09-27 19:17 自动更新**（14.13MB→15.87MB，版本线 3.14.3 内嵌 → 0.16.x 独立线，26 号自更新机制的实例）：注册名与 minified 名跨构建**存活（40/40 抽检，`fetchZaiStartPlanBalanceEnvelope` 除外）**；@偏移量失效——**引用优先用注册名**（如 `ClientRequestSigningV4Signer`、`createBigmodelOAuthClient`、`loginBigmodelCodingPlan`）。
+- `resources/glm/zcode.cjs` — CLI 主 bundle（压缩混淆，`r(fn,"name")` 保留大量原始函数名）。**2026-10-13 现状**：安装已迁 `C:\Program Files\ZCode`，装机内嵌束 14.43 MB（`.node-bundle-meta.json` 源路径 `apps/zcode-cli/packages/cli/dist/zcode.cjs`）；旧路径 `%LOCALAPPDATA%\Programs\ZCode` 已清空，其内 10-10 之前的自更新产物被装机覆盖。**2026-09-27 19:17 自动更新**（14.13MB→15.87MB，版本线 3.14.3 内嵌 → 0.16.x 独立线，26 号自更新机制的实例）：注册名与 minified 名跨构建**存活（40/40 抽检，`fetchZaiStartPlanBalanceEnvelope` 除外）**；@偏移量失效——**引用优先用注册名**（如 `ClientRequestSigningV4Signer`、`createBigmodelOAuthClient`、`loginBigmodelCodingPlan`）。
 
-**开源版差异面**：73 个闭源符号聚成六模块（V4 签名整块 / CUA helper 钉定 / 领取族 / 设备指纹硬件层 / 企业权益门控 / 测试 client），支付侧反而全开源（bigmodel 订阅 Provider 51.7KB 一行未藏）；分界 = 「能发放权益 + 能证明客户端身份」的模块。**详见 [43 · 官方未开源清单](zcode-plan-43-官方未开源清单.md)**（含快照仓史法证、单轨 env 收敛定性、四项开放项重定性）。。
+**开源版差异面**：73 个闭源符号聚成六模块（V4 签名整块 / CUA helper 钉定 / 领取族 / 设备指纹硬件层 / 企业权益门控 / 测试 client），支付侧反而全开源（bigmodel 订阅 Provider 51.7KB 一行未藏）；分界 = 「能发放权益 + 能证明客户端身份」的模块。**详见 [43 · 官方未开源清单](zcode-plan-43-官方未开源清单.md)**（含快照仓史法证、单轨 env 收敛定性、四项开放项重定性）。
 
-**2026-09-28 全量重验（更新后）**：43 篇文档引用的 813 个标识符逐一验尸——cjs 存活 585；asar(host) 存活 123（host 未更新，涉及结论全部有效）；验证码 SDK/第三方实现名约 105（来源本就不在 cjs，未变故有效）。**协议级事实零消失**：`zcode-plan/anthropic`、`billing/balance`、`zcodejwttoken`、`start-plan`×33、`agent/configs` 全部存活。**架构变化**：0.16.x CLI 把计费/领取/付费路由的执行收敛至 host（`buildZaiStartPlan*`/`claimManualPlan` 在 asar 同名存活），协议端点不变。待实测收敛：① 0.16.x CLI 的 start-plan 模型请求 live 复测（仍开）；② 已定位——签名 `lPe`/`KJt` 与 gate 存活、`UNSIGNED_PATHS` 常量消失（路径排除重组，行为随①复测）；captcha 配置经 `client/configs`（×2 存活）。
+**2026-09-28 全量重验（更新后）**：43 篇文档引用的 813 个标识符逐一验尸——cjs 存活 585；asar(host) 存活 123（host 未更新，涉及结论全部有效）；验证码 SDK/第三方实现名约 105（来源本就不在 cjs，未变故有效）。**协议级事实零消失**：`zcode-plan/anthropic`、`billing/balance`、`zcodejwttoken`、`start-plan`×33、`agent/configs` 全部存活。**架构变化**：0.16.x CLI 把计费/领取/付费路由的执行收敛至 host（`buildZaiStartPlan*`/`claimManualPlan` 在 asar 同名存活），协议端点不变。待实测收敛：① 0.16.x CLI 的 start-plan 模型请求 live 复测（**2026-10-13/14 两轮执行**：A/C 面 live 复核通过；正向 200 待资格——10-01 窗口到期后 balance/preview/touch 三空；构建层从未丢（资产 `tools/zcode_system.json`）；本号 3012 定性收敛＝三候选未决，见 37 §8.5）；② 已定位——签名 `lPe`/`KJt` 与 gate 存活、`UNSIGNED_PATHS` 常量消失（路径排除重组，行为随①复测）；captcha 配置经 `client/configs`（×2 存活）。
 - `resources/app.asar` — Electron UI 与 host（i18n、testId、Provider 实现）
 - `~/.zcode/v2/{credentials.json, setting.json, telemetry-state.json}` — 本机状态（已脱敏引用）
 - `~/.zcode/v2/logs/2026-09-26.log` — host 运行日志（含 balance 接口完整响应样例与账号配置下发快照）
@@ -172,3 +177,5 @@
 4. **off-peak 服务端排队细节**：客户端侧 `x-off-peak-ticket-id` 头与过期重试策略已还原，票据签发/续期接口可在运行期抓包补全。
 5. ~~**阿里云 PoW 的真实提交**~~ → **已解决（2026-09-27）**：原 `captcha_node/solver.js`（已清理）走 happy-dom + 真实 SDK 端到端跑通（无痕链路，SDK 自行 PoW+提交），详见 12 §5m.13 与 §4.1 新增行。剩余边角：限流分支（`LimitFlow`/`LimitedFlowToken`、`403 + x-auth-*`）仍需一次被限流的实包。
 6. ~~**补齐 V4 握手的复现脚本**（§4.2 第 2 项）~~ → **已解决（2026-09-28 重建并复验）**：`tools/v4_handshake.py` 按 05 §2/§3/§8 规格重建，`--self-test` 离线 6/6 断言通过，`--live` 实拍握手 HTTP 200 + 双层编码私钥解包成功。注：§8 当时的原始脚本不可考，此为按文档规格的重建实现，A 级证据的可复现性由此恢复。
+7. **3.15.1 全量复验落账（2026-10-13）** → 已完成（[44 号](zcode-plan-44-3.15.1机级安装与配置层.md)）：路径/版本/装机完整性（manifest↔磁盘逐条一致）、1,477 标识符验尸（真实漂移仅 §3 四条：OAuth 改名族 / UNSIGNED_PATHS 缺席延续 / URL 配置化 / 领取收敛维持），新配置层与装机插件面已登记。遗留（44 §5）：highspeed-card 接口面、OAuth 改名后协议变体核查、自更新写入面观察。
+8. **闭源六模块深潜（2026-10-13）** → 已完成（[45 号](zcode-plan-45-闭源六模块深潜.md)）：六模块逐一落位与定性（2/3 还原、4/5/6 改判、1 维持）；取证全程走本地链 `tools/asar_pick.js`+`grab.js`+`count_strings.js`（rea 应用图当时因上游缺陷不可用，现已修复，见 45 号工具链说明）。

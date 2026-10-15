@@ -99,3 +99,11 @@ ZCODE_REMOTE_ASSET_CDN_BASE_URL=https://cdn-zcode.z.ai/zcode/electron/releases/3
 
 > 前两项的性质已从「逆向未完成」变为「**无官方答案**」。继续静态挖掘的边际收益趋零，
 > 剩余信息只能来自 `out/host/index.js`。
+
+## 6. 2026-10-13 改判复核（见 [45](zcode-plan-45-闭源六模块深潜.md)，对象换为 3.15.1）
+
+- **模块 4 撤销**：`HostDetector`/`ATTR_HOST_ID`/`MachineGuid` 系 `@opentelemetry/resources@2.6.1` vendored 逐字打包（仓不含 node_modules 才造成「仓库 0 命中」口径差）；`GetVolumeInformation`/`baseboard` 3.15.1 全束 0。
+- **模块 5 部分撤销**：`entanglement`/`agent_teams`/`getUserInfo` 判为当时误报（命中皆 playwright/OTel 噪声）；真门控 = 服务端配置键 `codingPlanBillingDiscount` + `jR="coding_plan_zai_overseas_payment_required"` 封禁国内代扣。
+- **模块 6 撤销**：`TestClient`/`zcode-test` 全束 0（消失或改名）；验证码 param 生成本就在外部 SDK（12 号），不算 bundle 闭源。
+- **模块 2/3 已完整还原**：钉定值 Apple TeamID `8A5X4JJ39T`、buildId `pipeline-304023-f18d6db7`、下载默认源内网 `studio.zcode-ai.com:12345/zcode/deps`；claim 全协议 + `failureEndsAt` 冷却语义——见 45 §2.2/2.3。
+- **模块 1 维持**：V4 七件套全在 cjs，细节仍在 05；gate 开启态仍开。
