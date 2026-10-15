@@ -1,6 +1,6 @@
-# the unit 逆向工作区
+# ZCode 逆向工作区
 
-the unit（AI 编程助手）的逆向工程知识库：48 篇协议逆向文档 + 逆向工具脚本 + 上游源码快照。
+> ZCode（智谱 AI 编程助手）逆向工程知识库：48 篇协议逆向文档 + 逆向工具脚本 + 安装包解包证据。
 
 基于 3.15.1 / 3.14.5 机级安装包的完整逆向分析，覆盖认证、计费、聊天接口、V4 请求签名、CUA 浏览器自动化、插件系统、子代理运行时等全部子系统。
 
@@ -8,9 +8,9 @@ the unit（AI 编程助手）的逆向工程知识库：48 篇协议逆向文档
 
 | 目录 | 说明 |
 |---|---|
-| `docs/` | 48 篇逆向文档（`the unit-plan-01` ~ `47`），按子系统编号 |
-| `units/` | 逆向工具脚本：探针、签名复现、凭据解密、mitm 抓包、端到端验证 |
-| `re/` | 上游安装包解包结果与证据材料 |
+| `docs/` | 48 篇逆向文档（`zcode-plan-01` ~ `47`），按子系统编号 |
+| `tools/` | 逆向工具脚本：探针、签名复现、凭据解密、mitm 抓包、端到端验证 |
+| `re/` | 上游安装包解包结果与证据材料（`ZCode.exe` 3.14.5） |
 | `repo/` | 上游开源仓库快照（对照用，非本仓库产物） |
 | `CUA-还原调查.md` | CUA（浏览器自动化）子系统还原专项 |
 
@@ -23,7 +23,7 @@ the unit（AI 编程助手）的逆向工程知识库：48 篇协议逆向文档
 | **协议核心** | 05 V4 请求签名协议 · 08 聊天对话接口 · 09 OpenAI 兼容与 Responses 协议 |
 | **系统提示与上下文** | 18 系统提示词与上下文管理 · 13 AGENTS.md 支持 · 28 记忆系统 |
 | **工具与权限** | 15 工具与权限体系 · 19 命令风险评分 · 24 文件变更与回滚 |
-| **扩展体系** | 16 插件系统 · 32 Skills 系统 · 23 Hooks 与 unit 客户端 |
+| **扩展体系** | 16 插件系统 · 32 Skills 系统 · 23 Hooks 与 MCP 客户端 |
 | **云端与远程** | 17 云端会话与远程体系 · 25 远程目标 · 21 子代理运行时 |
 | **自动化** | 22 CUA 与浏览器自动化 · 20 动态工作流执行器 · 31 Cron 调度循环 · 36 Bots 投递体系 |
 | **外围子系统** | 26 外围子系统 · 33 搜索系统 · 34 Git 集成层 · 35 输出样式系统 · 27 IPC 通道注册表 |
@@ -34,14 +34,14 @@ the unit（AI 编程助手）的逆向工程知识库：48 篇协议逆向文档
 
 ## 核心结论
 
-- **V4 请求签名**（`the unit-plan-05`）：免费层身份闸门的完整要件，缺一即 `403 FreeTierError`
-- **免费层是匿名面**（2026-10-11 起）：上游从 `/zen/v1` 迁到 `/inference/v1`，须发 `Authorization: Bearer public`，带真实 key 反被判 401
-- **OpenAI 兼容面**（`the unit-plan-09`）：上游对 muse-spark 等模型只支持 Responses 协议
+- **V4 请求签名**（`zcode-plan-05`）：上游请求签名的完整要件，缺件即拒
+- **额度体系四层分离**（`zcode-plan-01`）：额度桶 / 订阅 / 资源包 / 余额 是四件不同的事，不可混用
+- **OpenAI 兼容面**（`zcode-plan-09`）：官方客户端走 OpenAI 兼容与 Responses 协议
 
 ## 相关项目
 
-逆向产出的反代网关：[the unit2api](https://github.com/hj01857655/the unit2api)、[Cline2api](https://github.com/hj01857655/Cline2api)、[Qoder2api](https://github.com/hj01857655/Qoder2api)、[WorkBuddy2api](https://github.com/hj01857655/WorkBuddy2api)、[CodeArts2api](https://github.com/hj01857655/CodeArts2api)、[the unit2api](https://github.com/hj01857655/the unit2api)
+同一作者的各产品反代网关：[OpenCode2api](https://github.com/hj01857655/OpenCode2api)、[AtomCode2api](https://github.com/hj01857655/AtomCode2api)、[Cline2api](https://github.com/hj01857655/Cline2api)、[Qoder2api](https://github.com/hj01857655/Qoder2api)、[WorkBuddy2api](https://github.com/hj01857655/WorkBuddy2api)、[CodeArts2api](https://github.com/hj01857655/CodeArts2api)
 
 ## 免责
 
-本文档库仅供技术研究与学习使用，与 the unit 官方无关。
+本文档库仅供技术研究与学习使用，与 ZCode 官方无关。
