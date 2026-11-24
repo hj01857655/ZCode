@@ -18,11 +18,13 @@ import { Switch } from "@/components/ui/switch.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { isImeComposingKeyEvent } from "@/lib/imeComposition.js";
 import { resolvePendingProviderDraftSave, type ProviderDraftValues } from "./ProviderDraftSave.js";
+import { FetchModelsButton } from "./FetchModelsButton.js";
 import {
   ProviderApiKeySection,
   ProviderCardHeader,
   ProviderConnectionSection,
   ProviderModelsSection,
+  createEmptyModel,
 } from "./ProviderCardSections.js";
 import { resolveModelProviderDisplayName } from "./constants.js";
 import { useProviderDetailFeedback } from "./ProviderDetailFeedback.js";
@@ -846,6 +848,25 @@ export function InlineEditableProviderCard({
           providerEnabled={provider.enabled}
           providerAccess={provider.config.access}
           models={models}
+          extraToolbar={
+            isApiKeyProvider && !readOnlyEndpoints ? (
+              <FetchModelsButton
+                apiFormat={apiFormat}
+                baseUrl={baseUrlValue}
+                apiKey={apiKeyValue}
+                existingModelIds={models.map((model) => model.modelId)}
+                onAddModels={async (modelIds) => {
+                  for (const modelId of modelIds) {
+                    await handleAddModel({
+                      ...createEmptyModel(),
+                      modelId,
+                      hasPersonalConfig: true,
+                    });
+                  }
+                }}
+              />
+            ) : undefined
+          }
           onTestModel={onTestModel ? handleTestModel : undefined}
           onModelCommit={handleModelCommit}
           onModelEnabledChange={handleModelEnabledChange}

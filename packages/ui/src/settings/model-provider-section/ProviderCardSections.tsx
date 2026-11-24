@@ -347,6 +347,8 @@ function createEmptyModel(): ProviderSettingsFormModel {
   };
 }
 
+export { createEmptyModel };
+
 export function ProviderModelsSection({
   providerId,
   providerName,
@@ -360,6 +362,7 @@ export function ProviderModelsSection({
   onAddModel,
   onReorderModelIds,
   settingsRevision = 0,
+  extraToolbar,
 }: {
   providerId: string;
   providerName?: string;
@@ -377,6 +380,7 @@ export function ProviderModelsSection({
   onAddModel: (model: ProviderSettingsFormModel) => void | Promise<void>;
   onReorderModelIds?: (modelIds: string[]) => void;
   settingsRevision?: number;
+  extraToolbar?: ReactNode;
 }) {
   const { intl } = useZCodeIntl();
   const { providerSettingsService } = useServices();
@@ -474,17 +478,20 @@ export function ProviderModelsSection({
         <span className="text-ui-base text-foreground-subtle">
           {intl.formatMessage({ id: "settings.modelProvider.models" })}
         </span>
-        <Button
-          type="button"
-          variant="secondary"
-          size="default"
-          className="rounded-lg"
-          data-testid={TID_MODEL_PROVIDER_ADD_MODEL_BUTTON}
-          onClick={openAddDialog}
-        >
-          <Plus data-icon="inline-start" aria-hidden="true" />
-          {intl.formatMessage({ id: "settings.modelProvider.addModel" })}
-        </Button>
+        <div className="flex items-center gap-2">
+          {extraToolbar}
+          <Button
+            type="button"
+            variant="secondary"
+            size="default"
+            className="rounded-lg"
+            data-testid={TID_MODEL_PROVIDER_ADD_MODEL_BUTTON}
+            onClick={openAddDialog}
+          >
+            <Plus data-icon="inline-start" aria-hidden="true" />
+            {intl.formatMessage({ id: "settings.modelProvider.addModel" })}
+          </Button>
+        </div>
       </div>
       {models.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-input-border bg-input">
