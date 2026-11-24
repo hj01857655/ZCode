@@ -110,6 +110,15 @@
       "global": false
     },
     {
+      "rule": "unmanaged-new-file",
+      "file": "packages/desktop/src/main/databaseStartupRelay.ts",
+      "module": "desktop",
+      "detail": "desktop",
+      "message": "新文件落在未受管模块 desktop；请放入 managed 模块，或用 pnpm architecture:adopt <id> --root <dir> 为它所在目录登记模块",
+      "fingerprint": "e155b2b4cf9d9217",
+      "global": false
+    },
+    {
       "rule": "disable-count",
       "file": "packages/ui/src/settings/model-provider-section/InlineEditableProviderCard.tsx",
       "module": "ui-model-provider-section",
