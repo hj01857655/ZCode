@@ -25,7 +25,8 @@ export function isContextExceededFinishReason(
 }
 
 // GLM（MaaS）输出侧安全审核用非标准的 sensitive 终止流；AI SDK 只认 content-filter。
-const CONTENT_FILTER_FINISH_REASONS = new Set(["content-filter", "content_filter", "sensitive"]);
+// 本地构建：content_filter/敏感类 finishReason 不再特殊化——原样透传，按普通结束处理
+const CONTENT_FILTER_FINISH_REASONS = new Set<string>([]);
 
 function isContentFilterFinishReason(reason: string | undefined): boolean {
   return reason !== undefined && CONTENT_FILTER_FINISH_REASONS.has(reason.trim().toLowerCase());

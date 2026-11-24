@@ -168,6 +168,8 @@ pnpm bundle:desktop -- --help
 
 默认目标为 macOS arm64，默认输出目录为 `packages/desktop/dist/`。`--os` 支持 `mac`、`win`、`linux`，`--arch` 支持 `x64`、`arm64`；实际打包与签名需要目标平台对应的工具和配置。
 
+打包默认使用正式身份与生产后端，产物名为 `ZCode-...`。只有显式设置 `ZCODE_ENV=test` 时才生成 `ZCode Preview` / `_TEST` 测试包；`ZCODE_PREVIEW_IDENTITY=1` 可在生产后端下强制 Preview 身份。
+
 安装：双击打开产物 DMG，将 ZCode 拖入"应用程序"。本地构建未签名，首次打开若被 macOS 拦截，执行：
 
 ```bash

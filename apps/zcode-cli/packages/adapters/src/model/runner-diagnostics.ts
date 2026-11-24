@@ -435,10 +435,7 @@ const CONTEXT_LIMIT_FINISH_REASONS = new Set([
 const EMPTY_COMPLETION_RETRY_EXCLUSIONS = new Set([
   ...CONTEXT_LIMIT_FINISH_REASONS,
   "refusal",
-  "content-filter",
-  "content_filter",
-  // GLM（MaaS）输出侧安全审核的终止原因，语义同 content_filter。
-  "sensitive",
+  // 本地构建：content_filter/sensitive 不再排除重试——审核截断的回复与普通空补全同等对待。
 ]);
 
 export function createEmptyContextExceededError(input: {

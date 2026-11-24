@@ -44,7 +44,17 @@ const DEFAULT_TARGET_OS = "mac";
 const DEFAULT_TARGET_ARCH = "arm64";
 const desktopDistDir = process.env.ZCODE_DESKTOP_DIST_DIR || "dist";
 const desktopDistRoot = resolve(desktopRoot, desktopDistDir);
-const desktopProductIdentity = resolveDesktopProductIdentity(process.env);
+
+// 打包产物默认使用正式身份与生产后端；只有显式 ZCODE_ENV=test 才进入测试后端。
+// 源码 clone 后直接 pnpm bundle:desktop 必须得到 ZCode，不能依赖调用方记得设置环境变量。
+export function resolveBundleZCodeEnv(env = process.env) {
+  // 只有字面 test 才切测试后端；未设置或非法值一律按正式包处理，避免误打 _TEST 产物。
+  return env.ZCODE_ENV?.trim().toLowerCase() === "test" ? "test" : "production";
+}
+
+const bundleZCodeEnv = resolveBundleZCodeEnv();
+const bundleEnvWithDefault = { ...process.env, ZCODE_ENV: bundleZCodeEnv };
+const desktopProductIdentity = resolveDesktopProductIdentity(bundleEnvWithDefault);
 
 const osAliasMap = new Map([
   ["mac", "mac"],
@@ -217,6 +227,7 @@ export function createBundleProcessEnvs({ os, arch, electronMirror, electronBuil
   const commonEnv = {
     ZCODE_TARGET_OS: os,
     ZCODE_TARGET_ARCH: arch,
+    ZCODE_ENV: bundleZCodeEnv,
     ...createElectronRuntimeMirrorEnv(electronMirror),
   };
   const clearedElectronBuilderEnv = createElectronBuilderBinariesMirrorEnv("");
@@ -302,6 +313,8 @@ function printHelp() {
 环境变量:
   ZCODE_TARGET_OS              与 --os 等价
   ZCODE_TARGET_ARCH            与 --arch 等价
+  ZCODE_ENV                    打包环境，默认 production；仅显式 test 生成 ZCode Preview / _TEST 产物
+  ZCODE_PREVIEW_IDENTITY       设为 1 时强制 Preview 身份（后端环境仍由 ZCODE_ENV 决定）
 `);
 }
 
@@ -508,6 +521,8 @@ function shouldRetryElectronBuilderFailure(output) {
     "socket hang up",
     "unexpected end of file",
     "err_electron_builder_cannot_execute",
+    "ebusy: resource busy or locked",
+    "resource busy or locked",
   ];
 
   return transientSignals.some((signal) => normalizedOutput.includes(signal));
