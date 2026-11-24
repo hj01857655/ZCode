@@ -40,7 +40,8 @@ import {
   type AmendWorkflowRunSettingsInput,
   type ResumeSessionResult,
 } from "@zcode/core";
-import { createModelTelemetry } from "@zcode/telemetry";
+import type { ModelStatusSink } from "@zcode/contracts";
+import { createModelTelemetry } from "../telemetry-bootstrap.js";
 import {
   createRootTraceContext,
   ModelRequestSessionFeature,

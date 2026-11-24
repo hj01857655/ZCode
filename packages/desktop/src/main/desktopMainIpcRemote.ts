@@ -1,9 +1,7 @@
 import { normalizeRemoteConnectionError } from "@zcode/shared";
 /* eslint-disable max-lines -- 远程连接、OAuth 回调、遥测和通知 IPC 共用窗口级上下文，集中注册避免跨文件状态漂移。 */
 import { app, BrowserWindow, ipcMain, shell, type WebContents } from "electron";
-import armsRum from "@arms/rum-electron";
 import {
-  armsCustomEventPayloadSchema,
   buildRemoteWorkspaceConnectResultTelemetry,
   classifyRemoteUsageError,
   formatZodError,
@@ -16,7 +14,6 @@ import {
   remoteTargetSchema,
   rendererTelemetryEventPayloadSchema,
   telemetryRendererContextSchema,
-  type ArmsRumEnv,
   type BindRemoteWorkspaceSessionContextIpcResult,
   type RemoteTarget,
   type WindowHostRemoteWorkspaceDescriptor,
@@ -30,22 +27,13 @@ import {
   parseOAuthStateRegistration,
   registerOAuthState,
 } from "./desktopOAuthDeepLink.js";
-import {
-  dispatchFinalArmsCustomEvent,
-  enableSharedFinalArmsCustomEventE2EController,
-} from "./desktopArmsCustomEvent.js";
-import {
-  configureRemoteUsageArmsTelemetry,
-  reportRemoteConnectResultToArms,
-  type RemoteConnectionStats,
-} from "./desktopRemoteUsageArmsTelemetry.js";
+import type { RemoteConnectionStats } from "./desktopRemoteSessions.js";
 import {
   registerWebRemoteControlIpcHandlers,
   type WebRemoteControlIpcManager,
 } from "./desktopWebRemoteControlIpc.js";
 import { openFileUrlInDefaultApp, openPathInDefaultApp } from "./desktopMainIpcHelpers.js";
 import type { ConfirmExecutableFileOpen } from "@desktop/main/file-open-apps/index.js";
-import { getStabilityLifecycleScene } from "@desktop/main/desktopStabilityTelemetry.js";
 
 function isPublicRemoteReasonCode(code: string | undefined): code is string {
   // Bug 原因：前缀 OR 形成第二份公开码真源，任何内部 source-server-* 字符串都会穿透
@@ -213,14 +201,6 @@ export function registerRemoteIpcHandlers(options: {
     reportEvent(payload: unknown): Promise<void>;
   };
   reportRemoteUsageEvent: (rendererId: number, event: TelemetryEventPayload) => void;
-  armsCustomContext: {
-    deviceMid: string;
-    platform: NodeJS.Platform;
-    appVersion: string;
-    armsEnv: ArmsRumEnv;
-  };
-  /** 仅由 VITE_ZCODE_E2E_STORE_BRIDGE + test runner 双门禁打开。 */
-  finalArmsCustomEventE2EEnabled?: boolean;
   webRemoteControlManager: WebRemoteControlIpcManager;
   createRemoteWorkspaceSession: (
     win: BrowserWindow,
@@ -278,29 +258,6 @@ export function registerRemoteIpcHandlers(options: {
     }
   }
 
-  const finalArmsCustomEventE2E = options.finalArmsCustomEventE2EEnabled
-    ? enableSharedFinalArmsCustomEventE2EController()
-    : null;
-
-  configureRemoteUsageArmsTelemetry({
-    armsCustomContext: options.armsCustomContext,
-    getRemoteConnectionStats: options.getRemoteConnectionStats,
-    sendCustom: (payload) =>
-      armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]),
-    e2eController: finalArmsCustomEventE2E,
-    logger: options.logger,
-  });
-
-  function reportRemoteConnectResultToArmsSafely(
-    params: Parameters<typeof reportRemoteConnectResultToArms>[0],
-  ): void {
-    try {
-      reportRemoteConnectResultToArms(params);
-    } catch (error) {
-      options.logger.warn("[remote-usage-arms] connect result reporter failed", { error });
-    }
-  }
-
   ipcMain.on(InternalChannels.ScopedServicePortReady, (event, rawPayload: unknown) => {
     if (!rawPayload || typeof rawPayload !== "object") return;
     const payload = rawPayload as {
@@ -316,22 +273,6 @@ export function registerRemoteIpcHandlers(options: {
       attachmentId,
     });
   });
-  if (finalArmsCustomEventE2E) {
-    ipcMain.handle(PlatformChannels.ReadFinalArmsCustomEventsE2E, () =>
-      finalArmsCustomEventE2E.read(),
-    );
-    ipcMain.handle(PlatformChannels.ClearFinalArmsCustomEventsE2E, () => {
-      finalArmsCustomEventE2E.clear();
-    });
-    ipcMain.handle(
-      PlatformChannels.ConfigureFinalArmsCustomEventsE2E,
-      (_event, request: unknown) => {
-        finalArmsCustomEventE2E.configure(
-          request as Parameters<typeof finalArmsCustomEventE2E.configure>[0],
-        );
-      },
-    );
-  }
 
   registerWebRemoteControlIpcHandlers({
     reportRemoteUsageEvent,
@@ -424,48 +365,7 @@ export function registerRemoteIpcHandlers(options: {
     await options.appTelemetryCore.reportEvent(result.data);
   });
 
-  ipcMain.handle(PlatformChannels.ReportArmsCustomEvent, async (event, payload: unknown) => {
-    const result = armsCustomEventPayloadSchema.safeParse(payload);
-    if (!result.success) {
-      options.logger.warn(
-        "[report-arms-custom-event] invalid payload:",
-        formatZodError(result.error),
-      );
-      return;
-    }
-
-    // 正常退出清理会取消在途握手；只在 Main 已确认 app_quit 后排除这条曝光，避免吞掉运行期故障。
-    if (
-      options.armsCustomContext.platform === "win32" &&
-      getStabilityLifecycleScene() === "app_quit" &&
-      result.data.name === "chat_error_banner" &&
-      result.data.group === "ui_error" &&
-      result.data.properties?.surface === "session_subscription_error" &&
-      result.data.properties.error_message === "Windows runtime start was cancelled"
-    ) {
-      return;
-    }
-
-    try {
-      dispatchFinalArmsCustomEvent({
-        payload: result.data,
-        context: {
-          ...options.armsCustomContext,
-          rendererId: event.sender.id,
-        },
-        e2eController: finalArmsCustomEventE2E,
-        // FinalArmsCustomEventPayload 是 SDK RumCustomEvent 的收窄子集；SDK 额外要求
-        // BaseObject 索引签名，但这里不会动态追加未声明字段。
-        sendCustom: (payload) =>
-          armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]),
-      });
-    } catch (error) {
-      options.logger.warn(
-        "[report-arms-custom-event] sendCustom failed:",
-        normalizeUnknownError(error).message,
-      );
-    }
-  });
+  // ReportArmsCustomEvent 通道已随 ARMS 遥测移除：不再注册 handler。
 
   ipcMain.on(PlatformChannels.OAuthCallbackHandled, (event) => {
     options.appTelemetryRuntime.onOAuthCallbackHandled({
@@ -573,12 +473,6 @@ export function registerRemoteIpcHandlers(options: {
           connectTrigger,
         }),
       );
-      reportRemoteConnectResultToArmsSafely({
-        rendererId: event.sender.id,
-        result: "success",
-        remoteKind: result.data.kind,
-        connectTrigger,
-      });
       return {
         success: true,
         sessionId,
@@ -605,13 +499,6 @@ export function registerRemoteIpcHandlers(options: {
           errorCategory,
         }),
       );
-      reportRemoteConnectResultToArmsSafely({
-        rendererId: event.sender.id,
-        result: "failure",
-        remoteKind: result.data.kind,
-        connectTrigger,
-        errorCategory,
-      });
       const reasonCode = isPublicRemoteReasonCode(normalizedError.code)
         ? normalizedError.code
         : undefined;

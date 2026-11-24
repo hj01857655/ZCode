@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { rmSync, renameSync } from "node:fs";
+import { createReadStream, createWriteStream, rmSync, renameSync, statSync } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import { access, rm } from "node:fs/promises";
 
 export const ASAR_UNPACK_NATIVE_GLOB = "*.{node,dll,dylib,exe}";
 
-const ASAR_REPLACE_RETRY_COUNT = 10;
+const ASAR_REPLACE_RETRY_COUNT = 30;
 const ASAR_REPLACE_RETRY_DELAY_MS = 1_000;
 
 // Windows 上扫描器（Defender / 第三方 AV / Everything）可能在 asar 解包、打包完成后短暂持有
@@ -40,6 +41,34 @@ async function pathExists(path) {
   } catch {
     return false;
   }
+}
+
+// Windows 文件允许被读写共享打开但不能删除/改名（句柄未开 FILE_SHARE_DELETE）。
+// 覆盖写入不会改变目录项，绕开这类锁；必须在候选文件完整生成后调用。
+async function overwriteFileContents(sourcePath, destinationPath) {
+  await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath));
+  if (statSync(sourcePath).size !== statSync(destinationPath).size) {
+    throw new Error(`覆盖写入后大小不一致: ${sourcePath} -> ${destinationPath}`);
+  }
+}
+
+function replaceFileFromCandidate({ sourcePath, destinationPath, label }) {
+  try {
+    retryOnWindowsFileLock(() => renameSync(sourcePath, destinationPath), `${label} rename`);
+    return;
+  } catch (error) {
+    const locked =
+      error &&
+      (error.code === "EBUSY" ||
+        error.code === "EPERM" ||
+        /EBUSY|EPERM|resource busy or locked|permission denied/i.test(String(error.message)));
+    if (!locked || !statSync(destinationPath, { throwIfNoEntry: false })) throw error;
+  }
+  // 目标仍存在且不可替换时，直接覆盖内容；unpacked 是目录，只能走 rename。
+  retryOnWindowsFileLock(
+    () => overwriteFileContents(sourcePath, destinationPath),
+    `${label} overwrite`,
+  );
 }
 
 export function createAppAsarPackArgs({ sourceDir, destinationPath, targetPlatformKey }) {
@@ -85,17 +114,17 @@ export async function replaceAppAsarFromStaging({
     }
 
     // 先完整生成候选文件，再替换旧 archive 和 sidecar；不会把上一次打包的跨平台 native 留在 unpacked。
-    // Windows 上扫描器可能短暂持有旧 archive 句柄，删除/改名必须走同一条退避重试路径。
+    // Windows 扫描器可能持有句柄导致删除/改名 EPERM；先退避重试，仍失败时 app.asar 走覆盖写入。
     retryOnWindowsFileLock(() => rmSync(unpackedPath, { force: true, recursive: true }), "app.asar.unpacked");
     retryOnWindowsFileLock(
       () => renameSync(candidateUnpackedPath, unpackedPath),
       "app.asar.unpacked rename",
     );
-    retryOnWindowsFileLock(() => rmSync(appAsarPath, { force: true }), "app.asar");
-    retryOnWindowsFileLock(
-      () => renameSync(candidateAsarPath, appAsarPath),
-      "app.asar rename",
-    );
+    replaceFileFromCandidate({
+      sourcePath: candidateAsarPath,
+      destinationPath: appAsarPath,
+      label: "app.asar",
+    });
   } finally {
     await Promise.all([
       rm(candidateAsarPath, { force: true, recursive: true }),

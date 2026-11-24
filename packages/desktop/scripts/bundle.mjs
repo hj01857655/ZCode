@@ -106,9 +106,7 @@ const requiredRuntimeModules = [
   // 缺包产物在打包阶段直接失败，而不是等安装后启动崩溃。
   "@opentelemetry/exporter-trace-otlp-proto",
   "@opentelemetry/exporter-metrics-otlp-proto",
-  // Bugfix: @arms/rum-core 运行时会从 CJS 入口继续 require('@babel/runtime/helpers/*')。
-  // 它把 @babel/runtime 挂在 peerDependencies，pnpm workspace 开发态通常能解析，
-  // 但如果生产包没把该 peer 运行时带进 app.asar，已安装应用会在主进程启动阶段直接崩溃。
+  // Bugfix: @babel/runtime 被在包库运行时 require（peer 闭包），缺它安装包启动即崩，
   // 这里把 @babel/runtime 纳入 bundle 后机械校验，防止坏包继续流出。
   "@babel/runtime",
   // services 里的代理探测会在运行时 require("undici")。

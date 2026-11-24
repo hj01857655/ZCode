@@ -128,7 +128,6 @@ import {
   disposeConversationTelemetrySupervisors,
   reconcileConversationTelemetryWorkspaceScopes,
 } from "@/v4/telemetry/ConversationTelemetryAttachment.js";
-import { installConversationTelemetryParityE2EBridge } from "@/v4/telemetry/conversationTelemetryParityE2E.js";
 import { useSourceServerUpdateNotifications } from "@/root/sourceServerUpdateNotifications.js";
 import type {
   DeviceAdditionResult,
@@ -247,15 +246,6 @@ function RootInner({
       setSendFunnelArmsReporter(null);
     };
   }, [isDesktop, platform]);
-
-  useEffect(
-    () =>
-      installConversationTelemetryParityE2EBridge({
-        platform,
-        isDesktop: isDesktop === true,
-      }),
-    [isDesktop, platform],
-  );
 
   useEffect(
     () => () => {

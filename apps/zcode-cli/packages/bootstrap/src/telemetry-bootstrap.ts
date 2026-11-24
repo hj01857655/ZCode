@@ -1,33 +1,133 @@
-import { getCapturedZCodeAgentTelemetryEnv } from "@zcode/shared";
+import type { AgentExecutionTelemetryPort, ModelStatusSink } from "@zcode/contracts";
 import {
-  prepareModelTelemetryEnv,
-  shutdownPreparedModelTelemetry,
-  type PrepareModelTelemetryOptions,
-} from "@zcode/telemetry";
+  AgentTelemetryOperation,
+  type AgentTelemetryCausation,
+} from "@zcode/contracts";
+import type { Logger } from "@zcode/contracts";
 
 /**
- * 官方 CLI 异步入口在创建同步 App 之前调用；只把准备出的 device MID 放回业务 env，
- * OTLP Header 等私密配置仍保留在进程内捕获区，不进入 Tool/MCP 子进程环境。
+ * 遥测拔除后的 no-op 替身：原 @zcode/telemetry 包（OTLP 导出、agent trace/metrics）
+ * 已整体移除，这里保留 create-app 等装配点依赖的接口形状，全部操作为空实现，
+ * 不产生任何上报与落盘。
+ */
+
+function noopCausation(): AgentTelemetryCausation | undefined {
+  return undefined;
+}
+
+function makeNoopAgentExecutionTelemetry(): AgentExecutionTelemetryPort {
+  const noopScope = {
+    captureCausation: noopCausation,
+    run: <T>(execute: () => T): T => execute(),
+  };
+  return {
+    captureCausation: noopCausation,
+    startCompaction: () => ({
+      ...noopScope,
+      setInputTokens: () => {},
+      setOutputTokens: () => {},
+      markFallbackSelected: () => {},
+      finishCompleted: () => {},
+      finishDiscarded: () => {},
+      finishFailed: () => {},
+      finishCancelled: () => {},
+    }),
+    startDetachedOperation: () => ({
+      ...noopScope,
+      setResultType: () => {},
+      finishCompleted: () => {},
+      finishFailed: () => {},
+      finishCancelled: () => {},
+    }),
+    startStep: () => ({
+      ...noopScope,
+      finishCompleted: () => {},
+      finishDiscarded: () => {},
+      finishFailed: () => {},
+      finishCancelled: () => {},
+    }),
+    startTool: () => ({
+      ...noopScope,
+      markPermissionRequested: () => {},
+      setPermissionDecision: () => {},
+      setOutputBytes: () => {},
+      setOutputTruncated: () => {},
+      startCommand: () => ({
+        ...noopScope,
+        markFirstOutput: () => {},
+        markTerminationRequested: () => {},
+        setExitCode: () => {},
+        setSignal: () => {},
+        setOutputBytes: () => {},
+        setTimedOut: () => {},
+        finishCompleted: () => {},
+        finishFailed: () => {},
+        finishCancelled: () => {},
+        finishBackgrounded: () => {},
+      }),
+      finishCompleted: () => {},
+      finishDenied: () => {},
+      finishFailed: () => {},
+      finishCancelled: () => {},
+    }),
+    startTurn: () => ({
+      ...noopScope,
+      finishCompleted: () => {},
+      finishFailed: () => {},
+      finishCancelled: () => {},
+    }),
+    abandonSession: () => {},
+  };
+}
+
+export interface ModelTelemetry {
+  agentExecution: AgentExecutionTelemetryPort;
+  statusSink?: ModelStatusSink;
+  shutdown(): Promise<void>;
+}
+
+export function createModelTelemetry(_options?: {
+  owner?: unknown;
+  sessionId?: string;
+}): ModelTelemetry {
+  void AgentTelemetryOperation;
+  return {
+    agentExecution: makeNoopAgentExecutionTelemetry(),
+    statusSink: undefined,
+    shutdown: async () => {},
+  };
+}
+
+export interface PrepareModelTelemetryOptions {
+  cliVersion?: string;
+  productVersion?: string;
+  runtimeSurface?: string;
+}
+
+export async function prepareModelTelemetryEnv(
+  env: NodeJS.ProcessEnv,
+  _options: PrepareModelTelemetryOptions = {},
+): Promise<NodeJS.ProcessEnv> {
+  return env;
+}
+
+export async function shutdownPreparedModelTelemetry(
+  _logger?: Logger,
+): Promise<void> {
+  void _logger;
+}
+
+/**
+ * 兼容旧入口签名：原实现会准备 device MID 环境区，现在直接原样返回传入 env。
  */
 export async function prepareZCodeTelemetryEnv(
   env: NodeJS.ProcessEnv = process.env,
-  options: PrepareModelTelemetryOptions = {},
+  _options: PrepareModelTelemetryOptions = {},
 ): Promise<NodeJS.ProcessEnv> {
-  const prepared = await prepareModelTelemetryEnv({
-    ...getCapturedZCodeAgentTelemetryEnv(),
-    ...env,
-  }, {
-    ...options,
-    productVersion: options.productVersion ?? env.ZCODE_APP_VERSION,
-  });
-  const deviceMid = prepared.ZCODE_TELEMETRY_DEVICE_MID;
-  return deviceMid ? { ...env, ZCODE_TELEMETRY_DEVICE_MID: deviceMid } : env;
+  return env;
 }
 
 /**
- * 与 prepareZCodeTelemetryEnv 对称地关闭当前进程持有的 Telemetry Owner。
- * 单个 App/Session 只允许 flush；只有最外层可执行入口可以调用本函数。
+ * 与 prepareZCodeTelemetryEnv 对称的关闭钩子，遥测拔除后为空操作。
  */
-export async function shutdownZCodeTelemetry(): Promise<void> {
-  await shutdownPreparedModelTelemetry();
-}
+export async function shutdownZCodeTelemetry(): Promise<void> {}
