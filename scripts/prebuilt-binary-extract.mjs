@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -13,26 +14,31 @@ import { dirname, join, relative } from "node:path";
 import process from "node:process";
 import { runCommand } from "./spawn-command.mjs";
 
-// Bugfix: Windows GNU tar（Git Bash）会把绝对路径里的盘符冒号（C:）当成远程主机名，
-// 反斜杠路径也会被 MSYS 参数转换破坏。tar 参数统一转正斜杠，归档路径优先改用
-// 相对 cwd 的形式避开盘符冒号；对 bsdtar 与 Linux/macOS CI 无影响。
+// Windows 下 PATH 可能落到 Git Bash 的 GNU tar，它会把绝对路径里的盘符冒号
+// （例如 E:）当成远程主机名。先尝试同盘相对路径；跨盘绝对路径时给 GNU tar 加
+// --force-local 并置于 -xzf 之前。bsdtar 会拒绝该参数，用一次 --version 探测区分。
 function toTarPosixPath(pathValue) {
   return pathValue.replaceAll("\\", "/");
 }
 
-function resolveTarArchiveArg(archivePath, cwd) {
+function resolveTarArchiveArgs(archivePath, cwd) {
+  let archiveArg = toTarPosixPath(archivePath);
   if (process.platform === "win32") {
     try {
       const relativeArchivePath = relative(cwd, archivePath);
       if (relativeArchivePath && !relativeArchivePath.startsWith("..")) {
-        return toTarPosixPath(relativeArchivePath);
+        archiveArg = toTarPosixPath(relativeArchivePath);
       }
     } catch {
-      // 跨盘符时 relative 会抛错，退回正斜杠绝对路径（bsdtar 可用）。
+      // 跨盘符时 relative 会抛错，保留正斜杠绝对路径。
     }
   }
-
-  return toTarPosixPath(archivePath);
+  if (/^[A-Za-z]:\//.test(archiveArg)) {
+    const probe = spawnSync("tar", ["--version"], { encoding: "utf8" });
+    const isGnuTar = /gnu tar/i.test(String(probe.stdout || "") + String(probe.stderr || ""));
+    return isGnuTar ? ["--force-local", archiveArg] : [archiveArg];
+  }
+  return [archiveArg];
 }
 
 export function extractPrebuiltArchive({ archivePath, archiveExt, extractDir, cwd }) {
@@ -55,11 +61,13 @@ export function extractPrebuiltArchive({ archivePath, archiveExt, extractDir, cw
   }
 
   const tarCwd = cwd ?? process.cwd();
-  runCommand(
-    "tar",
-    ["-xzf", resolveTarArchiveArg(archivePath, tarCwd), "-C", toTarPosixPath(extractDir)],
-    { cwd: tarCwd },
-  );
+  const archiveArgs = resolveTarArchiveArgs(archivePath, tarCwd);
+  const prefix = archiveArgs.length === 2 ? archiveArgs[0] : null;
+  const archiveArg = archiveArgs[archiveArgs.length - 1];
+  const tarArgs = prefix
+    ? [prefix, "-xzf", archiveArg, "-C", toTarPosixPath(extractDir)]
+    : ["-xzf", archiveArg, "-C", toTarPosixPath(extractDir)];
+  runCommand("tar", tarArgs, { cwd: tarCwd });
 }
 
 export function findPrebuiltBinary(rootDir, binaryName) {
