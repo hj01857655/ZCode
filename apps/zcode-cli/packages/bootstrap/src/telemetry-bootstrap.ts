@@ -104,11 +104,36 @@ export interface PrepareModelTelemetryOptions {
   runtimeSurface?: string;
 }
 
+const LEGACY_TELEMETRY_ENV_KEYS = [
+  "ZCODE_TELEMETRY_REPORT_ENDPOINT",
+  "ZCODE_TELEMETRY_DEVICE_MID",
+  "ZCODE_TELEMETRY_ACCOUNT_ID",
+  "ZCODE_ARMS_RUM_ENDPOINT",
+];
+
+/**
+ * 遗留遥测环境变量清除：即便系统/父进程注入了旧版遥测变量（OTEL 导出端点、数仓端点、
+ * 设备标识），也在进程入口剔除，防止未来任何恢复的采集路径经 env 通道复活。
+ * 保留 ZCODE_TELEMETRY_RUNTIME_SURFACE —— 它是运行面路由标志，不参与上报。
+ */
+function scrubLegacyTelemetryEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  for (const key of Object.keys(env)) {
+    if (
+      key.startsWith("OTEL_EXPORTER_OTLP_") ||
+      key.startsWith("OTEL_RESOURCE_ATTRIBUTES") ||
+      LEGACY_TELEMETRY_ENV_KEYS.includes(key)
+    ) {
+      delete env[key];
+    }
+  }
+  return env;
+}
+
 export async function prepareModelTelemetryEnv(
   env: NodeJS.ProcessEnv,
   _options: PrepareModelTelemetryOptions = {},
 ): Promise<NodeJS.ProcessEnv> {
-  return env;
+  return scrubLegacyTelemetryEnv(env);
 }
 
 export async function shutdownPreparedModelTelemetry(
@@ -124,7 +149,7 @@ export async function prepareZCodeTelemetryEnv(
   env: NodeJS.ProcessEnv = process.env,
   _options: PrepareModelTelemetryOptions = {},
 ): Promise<NodeJS.ProcessEnv> {
-  return env;
+  return scrubLegacyTelemetryEnv(env);
 }
 
 /**
