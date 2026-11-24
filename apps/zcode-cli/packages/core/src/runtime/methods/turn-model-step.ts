@@ -3,7 +3,6 @@ import type { ToolSearchExecutionContext } from "@zcode/contracts";
 import { getTurnTools } from "./turn-tool-visibility.js";
 import { isOffPeakUserTakeover, refreshOffPeakTurnAfterTakeover } from "../off-peak/turn.js";
 
-import { beginLocalTurnPreparation } from "@zcode/contracts";
 import {
   CompactTrigger,
   CoreErrorType,
@@ -192,7 +191,6 @@ async function runModelBackedTurnStepImpl(
     modelStepCount: state.modelStepCount,
     traceContext: modelTraceContext,
   });
-  const finishPersistence = beginLocalTurnPreparation(modelTraceContext, "persistence");
   await this.persistAssistantMessage(
     assistantMessageId,
     state.currentUserMessageId,
@@ -225,7 +223,6 @@ async function runModelBackedTurnStepImpl(
   );
   await this.appendEvent(modelRequestEvent, modelTraceContext);
   state.events.push(modelRequestEvent);
-  finishPersistence();
   const streamingToolCoordinator = createStreamingToolCoordinator(this, state, {
     assistantMessageId,
     model,

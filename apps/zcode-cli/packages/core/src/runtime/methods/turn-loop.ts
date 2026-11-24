@@ -7,7 +7,6 @@ import {
 import { getTurnTools } from "./turn-tool-visibility.js";
 import { refreshOffPeakTurnAfterTakeover } from "../off-peak/turn.js";
 import { appendRuntimeAgentListing } from "../helpers/agent-listing.js";
-import { beginLocalTurnPreparation } from "@zcode/contracts";
 import { createLiveToolSearchContext, latchMcpServerWait } from "./mcp.js";
 import { buildToolSearchAnnouncement } from "../../tool/search/exposure.js";
 import {
@@ -97,7 +96,6 @@ export async function runRegularTurnLoop(
       }
     }
 
-    const finishMcp = beginLocalTurnPreparation(state.turnTraceContext, "mcp");
     // 只有正常新请求才应用最新 MCP 列表；断流重试、准入重试、续写等恢复请求沿用原请求的工具列表。
     const mcpToolListRefreshed = state.normalInputPreparationPending;
     // 自动任务（automation / 闲时）无人交互，即使会话策略是 background 也等启动结束。
@@ -119,11 +117,8 @@ export async function runRegularTurnLoop(
         );
       }
     }
-    finishMcp();
     throwIfTurnAborted(state.turnAbortSignal);
-    const finishTools = beginLocalTurnPreparation(state.turnTraceContext, "tools");
     const tools = getTurnTools(this, state);
-    finishTools();
 
     // 输入附件在 compaction 之前运行：本轮输入或上一批工具结果产生的项属于 compaction
     // 保留或摘要的历史。只在有新输入时收集（轮首、完整工具批次之后、文本回复后续上 guide）；

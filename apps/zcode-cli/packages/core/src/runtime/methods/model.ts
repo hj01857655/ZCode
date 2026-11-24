@@ -1,4 +1,3 @@
-import { beginLocalTurnPreparation } from "@zcode/contracts";
 import { runWithModelInvocationContext, traceContextToLogContext } from "../deps.js";
 import type {
   ModelReasoningContentBlock,
@@ -60,7 +59,6 @@ export async function runModelTextRequest(
   this: AgentRuntimeInternal,
   options: RunModelTextRequestOptions,
 ): Promise<RuntimeModelTextResult> {
-  const finishAssembly = beginLocalTurnPreparation(options.traceContext, "request_assembly");
   const model = options.model;
   const executionModelSelection = {
     providerId: model.providerId,
@@ -289,7 +287,6 @@ export async function runModelTextRequest(
   const modelStream = runWithModelInvocationContext(modelInvocationContext, () =>
     model.streamText(modelRequest),
   );
-  finishAssembly();
   try {
     for await (const event of modelStream) {
       switch (event.type) {

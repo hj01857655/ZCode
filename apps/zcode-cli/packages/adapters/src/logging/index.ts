@@ -11,7 +11,6 @@ import { LogLevel, LogLevelName } from "@zcode/contracts";
 import {
   ZCODE_RUNTIME_ENV_KEY,
   normalizeZCodeRuntimeEnv,
-  createLocalTtftLogQueue,
 } from "@zcode/shared";
 import {
   formatLocalLogDate,
@@ -28,25 +27,6 @@ import {
   toSerializableEntry,
 } from "./serialize.js";
 import { maybeThrowStorageFsFault } from "../storage/fs-fault-injection.js";
-
-let reportedTtftDrops = 0;
-const localTtftLogs = createLocalTtftLogQueue(async (entries, dropped) => {
-  const files = new Map<string, string>();
-  for (const entry of entries) files.set(entry.path, (files.get(entry.path) ?? "") + entry.line);
-  for (const [path, contents] of files) {
-    await mkdir(dirname(path), { recursive: true });
-    maybeThrowStorageFsFault({ operation: "appendFile", path });
-    const loss =
-      dropped > reportedTtftDrops
-        ? `${JSON.stringify({ timestamp: new Date().toISOString(), level: "warn", event: "ttft.log.dropped", count: dropped })}\n`
-        : "";
-    await appendFile(path, loss + contents, "utf8");
-    reportedTtftDrops = dropped;
-  }
-});
-export async function flushLocalTtftLogs(): Promise<void> {
-  await localTtftLogs.flush();
-}
 
 export {
   LOG_CLEANUP_STARTUP_DELAY_MS,
@@ -149,12 +129,6 @@ export class NodeFileLogger implements Logger {
     const entry = this.createEntry(level, message, mergedContext, error);
     const serialized = toSerializableEntry(entry, this.redactor);
     const line = JSON.stringify(serialized);
-
-    // 首响应诊断保留生产 info，但不在模型消费循环中同步写盘；脱敏仍复用同一入口。
-    if (typeof serialized.event === "string" && serialized.event.startsWith("ttft.")) {
-      localTtftLogs.enqueue({ path: join(this.logDir, getLogFileName()), line: `${line}\n` });
-      return;
-    }
 
     try {
       ensureLogDir(this.logDir);
