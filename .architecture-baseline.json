@@ -1,4 +1,131 @@
 {
   "version": 1,
-  "violations": []
+  "violations": [
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/enterpriseCodingPlanProducts.ts",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "29977b30bc0739f9",
+      "global": false
+    },
+    {
+      "rule": "max-file-lines",
+      "file": "packages/ui/src/settings/model-provider-section/Detail.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "1263",
+      "message": "文件 1263 行，超过上限 800 行",
+      "fingerprint": "45c2f5e0655e5296",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/providerFamilyConnectionVisibility.ts",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "4ab8491c4ff047e6",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/useModelProviderNavigation.ts",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "51f1460d0025192f",
+      "global": false
+    },
+    {
+      "rule": "max-file-lines",
+      "file": "packages/ui/src/settings/model-provider-section/StatusCards.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "1121",
+      "message": "文件 1121 行，超过上限 800 行",
+      "fingerprint": "531978cb98ecebf6",
+      "global": false
+    },
+    {
+      "rule": "max-file-lines",
+      "file": "packages/ui/src/settings/model-provider-section/InlineEditableProviderCard.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "882",
+      "message": "文件 882 行，超过上限 800 行",
+      "fingerprint": "68d00428a713ff47",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/Navigation.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "6e7a236cda216785",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/FetchModelsButton.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "8fbd897e5cdc5158",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/StatusCards.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "c04023fa8266e5e8",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/ProviderCardSections.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "d3af3f053e853198",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/useCodingPlanProducts.ts",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "d6865a0442e8408d",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/ProviderModelMetadata.ts",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "db9c83def4144c28",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/InlineEditableProviderCard.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "ef14729ef1f85770",
+      "global": false
+    },
+    {
+      "rule": "disable-count",
+      "file": "packages/ui/src/settings/model-provider-section/Detail.tsx",
+      "module": "ui-model-provider-section",
+      "detail": "1",
+      "message": "文件包含 1 条 lint disable",
+      "fingerprint": "f26e170bb5eaaf00",
+      "global": false
+    }
+  ]
 }
