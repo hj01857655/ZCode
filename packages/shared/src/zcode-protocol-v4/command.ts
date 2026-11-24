@@ -1,6 +1,5 @@
 import { genUiModelContextSchema } from "../gen-ui/contract.js";
 import { createSessionRequestedConfigSchema } from "./create-session-config.js";
-import { localTtftContextSchema, localTtftClockSchema } from "../local-ttft/contract.js";
 import { conversationQuotesSchema } from "../conversationSelection.js";
 // Command 层：信封 / ACK / 命令全集 payload。
 // conversation rewind 无独立命令（裁决：= editUserQuery 的 UI 入口）；
@@ -438,7 +437,6 @@ export const commandEnvelopeSchema = z.object({
   pluginDiscoveryUi: z.literal(true).optional(),
   /** Host 可信 attachment 注入；CLI 保留到原 input intent。 */
   inputOrigin: z.enum(["desktop", "mobile"]).optional(),
-  ttft: localTtftContextSchema.optional(),
   // uuid v7，客户端生成，重试不变。
   commandId: z.string(),
   clientId: z.string(),
@@ -622,7 +620,6 @@ export type CommandQueryItem = z.infer<typeof commandQueryItemSchema>;
 export const commandsQueryResultSchema = z
   .object({
     results: z.array(commandQueryItemSchema).min(1).max(64),
-    clock: localTtftClockSchema.optional(),
   })
   .strict();
 export type CommandsQueryResult = z.infer<typeof commandsQueryResultSchema>;

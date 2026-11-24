@@ -11,6 +11,15 @@
       "global": false
     },
     {
+      "rule": "unmanaged-new-file",
+      "file": "packages/desktop/src/main/processResourceWindowEvent.ts",
+      "module": "desktop",
+      "detail": "desktop",
+      "message": "新文件落在未受管模块 desktop；请放入 managed 模块，或用 pnpm architecture:adopt <id> --root <dir> 为它所在目录登记模块",
+      "fingerprint": "2f53ab7c62ea35aa",
+      "global": false
+    },
+    {
       "rule": "max-file-lines",
       "file": "packages/ui/src/settings/model-provider-section/Detail.tsx",
       "module": "ui-model-provider-section",
@@ -47,6 +56,24 @@
       "global": false
     },
     {
+      "rule": "unmanaged-new-file",
+      "file": "packages/desktop/src/main/processResourceExternalAppSamples.ts",
+      "module": "desktop",
+      "detail": "desktop",
+      "message": "新文件落在未受管模块 desktop；请放入 managed 模块，或用 pnpm architecture:adopt <id> --root <dir> 为它所在目录登记模块",
+      "fingerprint": "5bb4bb52a97b604c",
+      "global": false
+    },
+    {
+      "rule": "unmanaged-new-file",
+      "file": "packages/ui/src/lib/userActionTelemetry.ts",
+      "module": "ui",
+      "detail": "ui",
+      "message": "新文件落在未受管模块 ui；请放入 managed 模块，或用 pnpm architecture:adopt <id> --root <dir> 为它所在目录登记模块",
+      "fingerprint": "5f5784bb1cf505c9",
+      "global": false
+    },
+    {
       "rule": "max-file-lines",
       "file": "packages/ui/src/settings/model-provider-section/InlineEditableProviderCard.tsx",
       "module": "ui-model-provider-section",
@@ -71,6 +98,15 @@
       "detail": "1",
       "message": "文件包含 1 条 lint disable",
       "fingerprint": "8fbd897e5cdc5158",
+      "global": false
+    },
+    {
+      "rule": "unmanaged-new-file",
+      "file": "packages/desktop/src/main/processResourceCliSource.ts",
+      "module": "desktop",
+      "detail": "desktop",
+      "message": "新文件落在未受管模块 desktop；请放入 managed 模块，或用 pnpm architecture:adopt <id> --root <dir> 为它所在目录登记模块",
+      "fingerprint": "a6238682e965bebb",
       "global": false
     },
     {

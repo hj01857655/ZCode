@@ -1,4 +1,3 @@
-import { localTtftFactsSchema } from "../local-ttft/contract.js";
 /* eslint-disable max-lines -- 三个 topic 的 logical/physical/candidate schema 必须共享同一通用传输声明，避免跨文件分叉。 */
 // 传输外壳：连接握手 / 订阅 / 帧信封。
 // 阶段为类型占位（后半接通道层时启用），数据形状已按规范定稿。
@@ -209,8 +208,6 @@ export const conversationTopicFrameSchema = createTopicFrameSchema(
   conversationDeltaSchema,
 )
   .extend({
-    ttft: localTtftFactsSchema.optional(),
-    ttftRelated: z.array(localTtftFactsSchema).max(16).optional(),
   })
   .superRefine((frame, context) => {
     if (!frame.topic.startsWith("conversation/") || frame.topic.length === "conversation/".length) {
@@ -442,7 +439,6 @@ export const V4_NOTIFICATIONS = {
   conversationFrame: "v4/conversation/frame",
   // 仅 live ingest 的无正文事实；不进入 topic snapshot/recovery。
   conversationTelemetryFact: "v4/telemetry/event",
-  localTtftFacts: "v4/telemetry/local-ttft",
   // 仅当前进程 live ToolCallResult 产生；历史与 replayable 链路不得补造。
   cuaPermissionObservation: "v4/cua/permission-observation",
   pluginUiToolResult: "v4/plugin-ui/tool-result",

@@ -580,7 +580,6 @@ export interface ZCodeAgentConversationCommandParams extends ZCodeAgentWorkspace
 }
 
 export interface ZCodeAgentCommandsQueryParams extends ZCodeAgentWorkspaceTarget {
-  clock?: true;
   commands: CommandKey[];
 }
 
@@ -994,7 +993,7 @@ export interface IZCodeAgentService {
   onDynamicProcessResourceSample(): Event<AgentLaneResourceSample>;
   /** 插件启动超时的工作区提示；订阅时补投当前进程的降级事实。 */
   onDynamicPluginStartupDegraded(params: ZCodeAgentWorkspaceTarget): Event<void>;
-  /** MCP 进程生命周期与低频内存事件，仅供可信 Host relay 上报 ARMS。 */
+  /** MCP 进程生命周期与低频内存事件，仅供可信 Host relay 上报。 */
   /** 仅 trusted Host relay 订阅；手机统计不依赖 renderer 生命周期。 */
   onDynamicRemoteConversationTelemetry(): Event<RemoteConversationTelemetryEvent>;
 
@@ -1106,10 +1105,6 @@ export interface IZCodeAgentService {
   onDynamicConversationFrame(
     params: ZCodeAgentWorkspaceTarget,
   ): Event<ConversationTopicWireCandidate>;
-  /** workspace 级 live telemetry 事实；connection facade 仅向可信 desktop-continuous 下游暴露。 */
-  onDynamicLocalTtftFacts(
-    params: ZCodeAgentWorkspaceTarget,
-  ): Event<import("@zcode/shared").LocalTtftFacts>;
   onDynamicConversationTelemetryFact(
     params: ZCodeAgentWorkspaceTarget,
   ): Event<ConversationTelemetryInput>;

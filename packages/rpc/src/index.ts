@@ -107,16 +107,6 @@ export {
   LoggingChannelClient,
 } from "./logging-middleware.js";
 
-export {
-  type NetworkTransportKind,
-  type NetworkObservation,
-  type NetworkTelemetrySink,
-  setNetworkTelemetrySink,
-  emitNetworkTelemetryObservation,
-  NetworkTelemetryChannelServer,
-  NetworkTelemetryChannelClient,
-} from "./network-telemetry-middleware.js";
-
 // Layer 6: Remote
 export {
   RemoteConnectionType,

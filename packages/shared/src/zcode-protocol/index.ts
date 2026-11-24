@@ -121,7 +121,6 @@ import {
   zcodeWorkspaceRefSchema,
 } from "../zcode-protocol-legacy-types.js";
 
-export * from "../local-ttft/contract.js";
 export {
   hookExecutionProjectionSchema,
   hookInvocationRowSchema,
@@ -727,7 +726,7 @@ export const zcodeProcessResourceSampleSchema = z
     totalMemoryGb: z.number().int().nonnegative().max(1_048_576).optional(),
     /**
      * CLI 进程启动时随机生成的实例标识，仅供 app 侧 main 统计「同时存活几个 CLI 进程」
-     * 与「最大单进程 RSS」。不进 ARMS 属性、不含 pid。收紧字符集是隐私红线的机械保障：
+     * 与「最大单进程 RSS」。不进上报属性、不含 pid。收紧字符集是隐私红线的机械保障：
      * 路径、workspace 标识这类内容不可能通过校验。
      */
     instanceToken: z
@@ -4700,7 +4699,6 @@ export const zcodeStoragePathReadySchema = z
   .strict();
 
 // 桌面本地 TTFT 的严格事实合同；检查点不能替代实际内容帧。
-export { localTtftFactsSchema } from "../local-ttft/contract.js";
 // 群来源由可信 Host 注入，V4 命令与持久化输入使用相同运行时校验。
 export {
   botIdentitySchema,

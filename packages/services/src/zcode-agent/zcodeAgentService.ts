@@ -66,9 +66,7 @@ import {
 } from "@zcode/shared";
 import { requestPluginReferenceCatalog } from "#src/zcode-agent/pluginReferenceCatalogRequest.js";
 import {
-  localTtftFactsSchema,
   sessionDebugSnapshotSchema,
-  type LocalTtftFacts,
 } from "@zcode/shared";
 /* oxlint-disable eslint(max-lines) -- ZCode Protocol transport、通知 wiring 和 app-facing session 方法必须共享同一个 client/emitter 上下文。 */
 import { ensureIndependentPlanSupport } from "./independentPlanSupport.js";
@@ -1514,7 +1512,6 @@ export function createZCodeAgentService(
     snapshot: SessionLifecycleSnapshot;
   }>();
   const conversationFrameEmitters = new Map<string, Emitter<ConversationTopicWireCandidate>>();
-  const localTtftFactsEmitter = new Emitter<{ workspaceKey: string; facts: LocalTtftFacts }>();
   const conversationTelemetryFactEmitters = new Map<string, Emitter<ConversationTelemetryInput>>();
   const contextComposition = createContextCompositionClient({
     onModelRequestMetrics: (workspace, fact) => {
@@ -2811,15 +2808,6 @@ export function createZCodeAgentService(
           return;
         }
 
-        if (message.method === V4_NOTIFICATIONS.localTtftFacts) {
-          const parsed = localTtftFactsSchema.safeParse(message.params);
-          if (parsed.success && !workspace.remoteSessionId && !workspace.workspaceIdentity?.trim())
-            localTtftFactsEmitter.fire({
-              workspaceKey: resolveWorkspaceKey(workspace),
-              facts: parsed.data,
-            });
-          return;
-        }
         if (message.method === V4_NOTIFICATIONS.turnAdmissionTelemetry) {
           const parsed = turnAdmissionTelemetrySchema.safeParse(message.params);
           if (parsed.success) {
@@ -4425,7 +4413,6 @@ export function createZCodeAgentService(
     remoteConversationTelemetryEmitter.dispose();
     for (const emitter of offPeakLifecycleEmitters.values()) emitter.dispose();
     offPeakLifecycleEmitters.clear();
-    localTtftFactsEmitter.dispose();
     cuaPermissionObservationEmitter.dispose();
     pluginUiToolResultEmitter.dispose();
     for (const emitter of workspaceConfigFrameEmitters.values()) {
@@ -7099,49 +7086,7 @@ export function createZCodeAgentService(
     },
 
     async sendConversationCommandV4(params: ZCodeAgentConversationCommandParams) {
-      const ttft =
-        !params.workspaceIdentity?.trim() &&
-        !params.remoteSessionId &&
-        (readTrustedZCodeAgentV4Connection(params)?.clientMode ??
-          params.clientMode ??
-          "desktop-continuous") === "desktop-continuous"
-          ? params.envelope.ttft
-          : undefined;
-      const logStage = (phase: string, status: string, at: number, durationMs?: number) => {
-        if (!ttft) return;
-        try {
-          logger.info(undefined, "[ttft]", {
-            event: "ttft.phase",
-            observationId: ttft.observationId,
-            commandId: params.envelope.commandId,
-            sessionId: params.envelope.sessionId,
-            phase,
-            status,
-            source: "host",
-            at,
-            durationMs,
-            pid: process.pid,
-          });
-        } catch {
-          /* 观测失败不改变命令裁决。 */
-        }
-      };
-      const measure = async <T>(phase: string, operation: () => Promise<T>): Promise<T> => {
-        if (!ttft) return operation();
-        const start = performance.timeOrigin + performance.now();
-        logStage(phase, "started", start);
-        try {
-          const result = await operation();
-          const end = performance.timeOrigin + performance.now();
-          logStage(phase, "completed", end, end - start);
-          return result;
-        } catch (error) {
-          const end = performance.timeOrigin + performance.now();
-          logStage(phase, "failed", end, end - start);
-          throw error;
-        }
-      };
-      const client = await measure("host.runtime", () => getClient(params));
+      const client = await getClient(params);
       // 新 Host 可能连接旧 CLI；先检查执行端，避免 z.object 静默丢弃状态后仍执行用户输入。
       const genUiContext = (params.envelope.payload as { genUiContext?: unknown } | null)
         ?.genUiContext;
@@ -7162,7 +7107,7 @@ export function createZCodeAgentService(
         planPayload.config?.planEnabled ||
         planPayload.firstInput?.planEnabled
       ) {
-        await measure("host.plan_support", () => ensureIndependentPlanSupport(client));
+        await ensureIndependentPlanSupport(client);
       }
       // RPC facade 会清掉调用方可伪造的顶层 clientMode，再用 trusted carrier 注入 host
       // 真值；host 内部 adapter 直调仍兼容显式 clientMode。
@@ -7171,7 +7116,7 @@ export function createZCodeAgentService(
         params.clientMode ??
         "desktop-continuous";
       let envelope = {
-        ...(await measure("host.envelope", () => buildConversationCommandEnvelope(params))),
+        ...(await buildConversationCommandEnvelope(params)),
         inputOrigin:
           commandClientMode === "web-remote-replayable"
             ? ("mobile" as const)
@@ -7209,23 +7154,12 @@ export function createZCodeAgentService(
         envelope = { ...envelope, payload: { ...highspeedPayload, highspeedMeta: legacyMeta } };
       }
       if (requiresProviderRegistryRefresh(envelope.type)) {
-        await measure("host.provider_sync", () =>
-          ensureAccountProviderConfigSynced({
-            client,
-            reason: "v4_command",
-            workspace: params,
-            refreshRegistry: true,
-          }),
-        );
-      }
-      // TTFT 首版只允许可信桌面本地 continuous，手机/远端透传不能开启本地观测。
-      if (
-        commandClientMode !== "desktop-continuous" ||
-        params.workspaceIdentity?.trim() ||
-        params.remoteSessionId
-      ) {
-        const { ttft: _ttft, ...withoutTtft } = envelope;
-        envelope = withoutTtft;
+        await ensureAccountProviderConfigSynced({
+          client,
+          reason: "v4_command",
+          workspace: params,
+          refreshRegistry: true,
+        });
       }
       if (envelope.type === "sendText" && envelope.sessionId) {
         const sessionId = envelope.sessionId;
@@ -7237,14 +7171,15 @@ export function createZCodeAgentService(
               : ("desktop" as const),
         };
         envelope = { ...envelope, payload };
-        const browserAmbientContext = await measure("host.browser_context", () =>
-          collectBrowserAmbientContext(options?.browserControlExecutor, {
+        const browserAmbientContext = await collectBrowserAmbientContext(
+          options?.browserControlExecutor,
+          {
             sessionId,
             workspacePath: params.workspacePath,
             ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
             ...(params.remoteSessionId ? { remoteSessionId: params.remoteSessionId } : {}),
             clientMode: commandClientMode,
-          }),
+          },
         );
         if (browserAmbientContext) {
           envelope = {
@@ -7258,10 +7193,7 @@ export function createZCodeAgentService(
         if (payload.sessionId) rememberClientTarget(client, params, payload.sessionId);
       }
       envelope = { ...envelope, ...coldResumeWorkspace(params) };
-      // ACK 往返可与执行重叠，诊断单列，不能与六个 TTFT 主阶段相加。
-      const ack: CommandAck = await measure("host.cli_ack", () =>
-        client.request(V4_METHODS.command, envelope, commandAckSchema),
-      );
+      const ack: CommandAck = await client.request(V4_METHODS.command, envelope, commandAckSchema);
       if (
         envelope.type === "forkAssistant" &&
         envelope.sessionId &&
@@ -7291,7 +7223,6 @@ export function createZCodeAgentService(
       }
       const query = commandsQueryParamsSchema.parse({
         commands: params.commands,
-        ...(params.clock ? { clock: true } : {}),
       });
       const client = await getReadOnlyClient(params);
       return client.request(V4_METHODS.commandsQuery, query, commandsQueryResultSchema);
@@ -7725,12 +7656,6 @@ export function createZCodeAgentService(
       return getConversationFrameEmitter(params).event;
     },
 
-    onDynamicLocalTtftFacts(params: ZCodeAgentWorkspaceTarget) {
-      return (listener: (facts: LocalTtftFacts) => void) =>
-        localTtftFactsEmitter.event((event) => {
-          if (event.workspaceKey === resolveWorkspaceKey(params)) listener(event.facts);
-        });
-    },
     onDynamicRemoteConversationTelemetry() {
       return remoteConversationTelemetryEmitter.event;
     },

@@ -31,9 +31,7 @@ import {
   type IDisposable,
   type IChannelServer,
   LoggingChannelServer,
-  NetworkTelemetryChannelServer,
 } from "@zcode/rpc";
-import { registerHostNetworkTelemetry, stopHostNetworkTelemetry } from "./hostNetworkTelemetry.js";
 import { registerHostServiceResourceTelemetry } from "./hostServiceResourceTelemetry.js";
 import { resolveResourceTelemetryEnvironmentKey } from "./hostResourceTelemetryEnvironment.js";
 import { reportHostSessionCreate } from "./hostSessionCreateTelemetry.js";
@@ -1282,7 +1280,6 @@ async function dispatchManualAutomationRun(params: {
 // Node warning 不是远端连接失败，改成结构化 warn，避免默认 stderr 被误染成 error。
 process.on("warning", (warning) => logger.warn(`${warning.name}: ${warning.message}`));
 
-registerHostNetworkTelemetry(parentPort);
 // Host 进程自身的 60 秒采样：一次读数两个出口——门控后写本地
 // `[memory]` 行，同一次读数换算成 HostResourceSample 经 parentPort 送 main 作 heap 来源。
 // services 计数器由各 service 工厂自注册。
@@ -2796,7 +2793,7 @@ function exposeServicesOnMessagePort(
   logger.info(`creating ChannelServer (deferInit=${deferInit})`);
   const rawServer = new ChannelServer(protocol, "host", 1000, deferInit);
   const loggedServer = new LoggingChannelServer(rawServer, logRpc);
-  const server = new NetworkTelemetryChannelServer(loggedServer);
+  const server = loggedServer;
   const agentService = services.getOptional(IZCodeAgentService);
   const connectionContext = { connectionId: `host-rpc-${randomUUID()}`, clientMode };
   const connectionScope = agentService
@@ -3026,7 +3023,6 @@ async function disposeHostResources(reason: string): Promise<HostShutdownResult>
     pluginSandboxRegistrationBridge.dispose();
     windowHostExtensions?.dispose();
     windowHostExtensions = null;
-    stopHostNetworkTelemetry();
     hostNetworkCapture.setCaptureId(null);
     hostSelfResourceTelemetry.stop();
     disposeLocalResourceTelemetry();
@@ -3123,7 +3119,6 @@ function disposeHostResourcesBestEffort(reason: string): void {
   pluginSandboxRegistrationBridge.dispose();
   windowHostExtensions?.dispose();
   windowHostExtensions = null;
-  stopHostNetworkTelemetry();
   hostNetworkCapture.setCaptureId(null);
   disposeLocalResourceTelemetry();
   disposeAttachedServicePorts();

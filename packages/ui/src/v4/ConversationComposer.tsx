@@ -12,7 +12,6 @@ import { useRemoteProjectReconnect } from "@/hooks/RemoteProjectPresentationCont
 import { useOptionalRemoteWorkspaceController } from "@/remote/useRemoteWorkspaceController.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { useRemoteConversationAvailable } from "@/v4/RemoteConversationAvailability.js";
-import { getLocalTtftObserver } from "@/v4/telemetry/local-ttft/contract.js";
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 /**
  * v4 会话 composer（composer parity）。
@@ -1627,21 +1626,9 @@ function ConversationComposerImpl({
         // 队列二次确认复用首次点击的 seed：不重报 send_click，也不重置发送触发来源，
         // 保证 send_click 与 send_result 严格 1:1。
         telemetrySeed = existingTelemetrySeed;
-        if (telemetrySeed.localTtft)
-          getLocalTtftObserver()?.confirmation(telemetrySeed.localTtft, false);
       } else {
         const freshSeed: ConversationPromptTelemetrySeed = {
           sendTime: Date.now(),
-          localTtft: !workspaceIdentity?.trim()
-            ? getLocalTtftObserver()?.start(
-                workspacePath,
-                (snapshotRef.current !== null &&
-                  snapshotRef.current.inputRouting.mode !== "startNow") ||
-                  false,
-                trimmed.startsWith("/"),
-                submittedAt,
-              )
-            : undefined,
           extraDetail: buildV4ConversationPromptTelemetryExtraDetail({
             // 与首次发送 seed 一起冻结，排队确认和执行中切换界面都不能改写本轮归属。
             uiMode: toTelemetryUiMode(uiStore?.getState().interfaceMode),
@@ -1795,8 +1782,6 @@ function ConversationComposerImpl({
         // 二次门禁：只消费预传完成的 ref，不在点击发送时回落上传。
         const readyAttachmentRefs = await attachmentsApi.prepareForSend();
         if (readyAttachmentRefs === null) {
-          if (telemetrySeed.localTtft)
-            getLocalTtftObserver()?.exclude(telemetrySeed.localTtft, "rejected");
           // send_click 已上报，此处不落定会留下无配对的悬空样本，污染成功率分母。
           conversationTelemetry?.settleSendResult({
             seed: telemetrySeed,
@@ -1890,8 +1875,6 @@ function ConversationComposerImpl({
             : {}),
         });
         if (sendResult === "blocked") {
-          if (telemetrySeed.localTtft)
-            getLocalTtftObserver()?.exclude(telemetrySeed.localTtft, "rejected");
           // 产品 guard 是一次正常拒绝，不应借异常路径表达；回滚发送前暂记的 history，
           // 同时不 clear editor/draft/附件，让用户切换模式后可以直接重试。
           rollbackPromptHistory();
@@ -1906,8 +1889,6 @@ function ConversationComposerImpl({
           return;
         }
         if (sendResult === "confirmationRequired") {
-          if (telemetrySeed.localTtft)
-            getLocalTtftObserver()?.confirmation(telemetrySeed.localTtft, true);
           rollbackPromptHistory();
           restoreSubmittedDraft();
           const latestQueueItemIds =
@@ -1932,8 +1913,6 @@ function ConversationComposerImpl({
         rollbackPromptHistory();
         // 已结算事务不会恢复；只有未确定命令结果的传输失败才保留迟到权威结算订阅。
         restoreSubmittedDraft(true);
-        if (telemetrySeed.localTtft)
-          getLocalTtftObserver()?.exclude(telemetrySeed.localTtft, "failed");
         // 发送失败草稿保留在输入框（不清空），仅记录原因。
         logger.warn(`[v4-composer] 发送失败: ${String(error)}`);
         // ACK 侧失败已由 SessionPane 落定；能走到这里的是 composer 自身链路异常。
@@ -3132,11 +3111,6 @@ function ConversationComposerImpl({
         open={heldQueueConfirmation !== null}
         onOpenChange={(open) => {
           if (!open && !pendingRef.current) {
-            if (heldQueueConfirmation?.telemetrySeed.localTtft)
-              getLocalTtftObserver()?.exclude(
-                heldQueueConfirmation.telemetrySeed.localTtft,
-                "cancelled",
-              );
             setHeldQueueConfirmation(null);
           }
         }}

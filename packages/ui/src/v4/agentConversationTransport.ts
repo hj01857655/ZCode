@@ -1,7 +1,4 @@
 import type { SessionLifecycleSnapshot } from "@zcode/shared";
-import { sendWithConversationDelayE2E } from "@/v4/conversationTransportDelayE2E.js";
-import { getLocalTtftObserver } from "@/v4/telemetry/local-ttft/contract.js";
-import { calibrateLocalTtftClock, localTtftNow } from "@zcode/shared";
 /* oxlint-disable eslint(max-lines) -- transport 将上传、分块读取和 runtime 生命周期保持在同一 host 边界。 */
 // ConversationTransport 的 desktop/host 实现：桥到 IZCodeAgentService 的 v4 转发面
 // （依赖注入原则——数据层不感知 host 细节，
@@ -81,7 +78,6 @@ type ConversationV4AgentService = Pick<
   | "getSessionLifecycle"
   | "onDynamicSessionLifecycle"
   | "onDynamicConversationFrame"
-  | "onDynamicLocalTtftFacts"
   | "onAgentRuntimeRestarted"
 > &
   Partial<Pick<IZCodeAgentService, "onAgentRuntimeLifecycle">>;
@@ -98,36 +94,7 @@ export function createAgentConversationTransport(
     workspacePath: target.workspacePath,
     ...(target.workspaceIdentity ? { workspaceIdentity: target.workspaceIdentity } : {}),
   };
-  let calibrationFlight: Promise<void> | undefined;
-  const calibrate = () => {
-    const observer = getLocalTtftObserver();
-    if (
-      target.workspaceIdentity?.trim() ||
-      !observer?.needsCalibration(target.workspacePath) ||
-      calibrationFlight
-    )
-      return;
-    const start = localTtftNow();
-    calibrationFlight = agentService
-      .queryConversationCommandsV4({
-        ...workspace,
-        commands: [{ sessionId: null, commandId: `ttft-clock-${crypto.randomUUID()}` }],
-        clock: true,
-      })
-      .then((result) => {
-        const clock = result.clock && calibrateLocalTtftClock(start, localTtftNow(), result.clock);
-        if (clock) observer.calibrate(target.workspacePath, clock);
-      })
-      .catch(() => {})
-      .finally(() => {
-        calibrationFlight = undefined;
-      });
-  };
-  const ensureHandshake = async () => {
-    const hello = await ensureAgentV4ConnectionHandshake(agentService);
-    calibrate();
-    return hello;
-  };
+  const ensureHandshake = async () => ensureAgentV4ConnectionHandshake(agentService);
   const listeners = new Set<
     (frame: ConversationTopicFrame, context?: { deliveryKind: TopicFrameDeliveryKind }) => void
   >();
@@ -146,16 +113,6 @@ export function createAgentConversationTransport(
   const decoder = createTopicWireDecoder(
     new TopicWireFrameAssembler(conversationTopicFrameSchema),
     (frame: ConversationTopicFrame, deliveryKind) => {
-      try {
-        if (!target.workspaceIdentity?.trim()) {
-          getLocalTtftObserver()?.receive(target.workspacePath, frame, deliveryKind);
-          // Bug 原因：校准只在 ensureHandshake 顺带刷新，排队/慢发送等待期间没有传输调用，
-          // 首输出时校准已超过 60 秒有效期，跨进程阶段被整体丢弃。内容帧到达即刷新过期校准。
-          calibrate();
-        }
-      } catch (error) {
-        logger.debug("[local-ttft] observation failed", { error });
-      }
       for (const listener of listeners) listener(frame, { deliveryKind });
     },
     (fault) => {
@@ -166,7 +123,6 @@ export function createAgentConversationTransport(
     decoder.accept(wire);
   });
   const topicBySubscriptionId = new Map<string, string>();
-  let ttftUpstream: { dispose(): void } | undefined;
   let upstream: { dispose(): void } | null = null;
   let runtimeRestartUpstream: { dispose(): void } | null = null;
   let runtimeLifecycleUpstream: { dispose(): void } | null = null;
@@ -200,17 +156,6 @@ export function createAgentConversationTransport(
   };
   const attachFrameUpstream = () => {
     if (!upstream) {
-      if (!target.workspaceIdentity?.trim())
-        ttftUpstream = agentService.onDynamicLocalTtftFacts?.(workspace)((facts) => {
-          try {
-            getLocalTtftObserver()?.checkpoint(target.workspacePath, facts);
-            // CLI 在 admitted/execution/各准备阶段都会发检查点：排队输入开始执行时
-            // 就能在首输出前拿到 60 秒内的新校准，不需要额外定时器或协议。
-            calibrate();
-          } catch (error) {
-            logger.debug("[local-ttft] checkpoint failed", { error });
-          }
-        });
       upstream = agentService.onDynamicConversationFrame(workspace)((frame) =>
         barrier.accept(frame),
       );
@@ -227,8 +172,6 @@ export function createAgentConversationTransport(
   const attachRuntimeRestartUpstream = () => {
     runtimeRestartUpstream ??= agentService.onAgentRuntimeRestarted((event) => {
       if (event.workspaceKey !== targetWorkspaceKey) return;
-      if (!target.workspaceIdentity?.trim())
-        getLocalTtftObserver()?.interrupt(target.workspacePath);
       runtimeGeneration += 1;
       // runtime generation 可复用 subId/ordinal；ownership 与 assembler 必须原子失效。
       barrier.clear();
@@ -241,8 +184,6 @@ export function createAgentConversationTransport(
     runtimeLifecycleUpstream ??=
       agentService.onAgentRuntimeLifecycle?.((event) => {
         if (event.workspaceKey !== targetWorkspaceKey) return;
-        if (event.state === "unavailable" && !target.workspaceIdentity?.trim())
-          getLocalTtftObserver()?.interrupt(target.workspacePath);
         // 只转发、不动 runtimeGeneration/barrier/decoder/topicBySubscriptionId：那是
         // onRuntimeRestart 的语义（新 runtime 已存在、可安全重订阅）。unavailable 时
         // 旧 CLI 已死不会再有帧到达，而提前递增 generation 会让随后 restart 的
@@ -472,9 +413,7 @@ export function createAgentConversationTransport(
       ) {
         throw new Error("proto.genUiContextUnsupported");
       }
-      return sendWithConversationDelayE2E(envelope, () =>
-        agentService.sendConversationCommandV4({ ...workspace, ...context, envelope }),
-      );
+      return agentService.sendConversationCommandV4({ ...workspace, ...context, envelope });
     },
     async queryCommands(params: CommandsQueryParams): Promise<CommandsQueryResult> {
       await ensureHandshake();
@@ -647,8 +586,6 @@ export function createAgentConversationTransport(
         listeners.delete(listener);
         if (listeners.size === 0) {
           upstream?.dispose();
-          ttftUpstream?.dispose();
-          ttftUpstream = undefined;
           upstream = null;
           logger.lifecycle.info("v4 conversation frame upstream detached", {
             ...lifecycleContext,

@@ -21,7 +21,6 @@ import {
   resolveZaiOAuthClientId,
   resolveZaiOAuthOrigin,
   normalizeDynamicWorkflowMode,
-  readZCodeAgentTelemetryEnv,
   sanitizeZCodeRuntimeEnv,
   type SourceServerArtifactPolicy,
   type ZCodeRuntimeEnv,
@@ -38,8 +37,6 @@ import {
   type ResolveRemoteCdnOptions,
 } from "./remoteCdn.js";
 import { getElectronAppPath, isElectronAppPackaged } from "./desktopElectronApp.js";
-
-declare const __ZCODE_PACKAGED_AGENT_TELEMETRY_ENV__: Readonly<Record<string, string>> | undefined;
 
 const isLocalDevelopmentRuntime = !isElectronAppPackaged();
 export const desktopRuntimeEnv: ZCodeRuntimeEnv = isLocalDevelopmentRuntime
@@ -160,10 +157,6 @@ function resolveWorkspaceRootForEnvFiles(): string | null {
 }
 
 export function loadHostProcessEnvFromLocalFiles(): Record<string, string> {
-  if (isElectronAppPackaged()) {
-    return resolvePackagedAgentTelemetryEnv();
-  }
-
   const desktopRoot = resolve(import.meta.dirname, "../..");
   const workspaceRoot = resolveWorkspaceRootForEnvFiles();
   const fileCandidates = [
@@ -183,7 +176,6 @@ export function loadHostProcessEnvFromLocalFiles(): Record<string, string> {
       ? [resolve(desktopRoot, ".env.development"), resolve(desktopRoot, ".env.development.local")]
       : []),
   ];
-
   const merged: Record<string, string> = {};
   const seen = new Set<string>();
 
@@ -204,28 +196,6 @@ export function loadHostProcessEnvFromLocalFiles(): Record<string, string> {
   }
 
   return applySelectedZCodeEnvLinks(merged);
-}
-
-export function resolvePackagedAgentTelemetryEnv(
-  compiledEnv:
-    | Readonly<Record<string, string>>
-    | undefined = typeof __ZCODE_PACKAGED_AGENT_TELEMETRY_ENV__ === "undefined"
-    ? undefined
-    : __ZCODE_PACKAGED_AGENT_TELEMETRY_ENV__,
-): Record<string, string> {
-  if (!compiledEnv) {
-    return {};
-  }
-
-  // 修复原因：开发版通过启动进程继承 OTLP 配置，正式安装包从 Finder/开始菜单启动时没有
-  // 这组运行时环境，Agent 因而静默落入 Noop。构建默认值只允许连接字段进入 Main；
-  // UID、Device MID 和 runtime surface 仍由 Host 的可信运行时上下文生成。
-  return readZCodeAgentTelemetryEnv({
-    OTEL_EXPORTER_OTLP_ENDPOINT: compiledEnv.OTEL_EXPORTER_OTLP_ENDPOINT,
-    OTEL_EXPORTER_OTLP_HEADERS: compiledEnv.OTEL_EXPORTER_OTLP_HEADERS,
-    OTEL_SERVICE_NAME: compiledEnv.OTEL_SERVICE_NAME,
-    ZCODE_TELEMETRY_RUNTIME_DISTRIBUTION: compiledEnv.ZCODE_TELEMETRY_RUNTIME_DISTRIBUTION,
-  });
 }
 
 function resolveDevelopmentMockCdnDir(): string {
@@ -565,19 +535,6 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
             )
           : undefined;
   const windowsAppInstallDir = resolveWindowsAppInstallDirForDataBaseDirGuard();
-  const agentTelemetryEnv = readZCodeAgentTelemetryEnv(rawInheritedEnv);
-  // Desktop 身份由 host 从凭据仓库和本机状态读取后可信注入；外部环境只能配置 OTLP 连接，
-  // 不能伪造 uid/device/runtime surface 或绕过本地 identity state 的隔离边界。
-  for (const key of [
-    "ZCODE_TELEMETRY_USER_ID",
-    "ZCODE_TELEMETRY_USER_ID_HASH",
-    "ZCODE_TELEMETRY_USER_SUBJECT_ID",
-    "ZCODE_TELEMETRY_IDENTITY_STATE",
-    "ZCODE_TELEMETRY_DEVICE_MID",
-    "ZCODE_TELEMETRY_RUNTIME_SURFACE",
-  ]) {
-    delete agentTelemetryEnv[key];
-  }
   const inheritedEnv = applySelectedZCodeEnvLinks({
     ...sanitizeZCodeRuntimeEnv(rawInheritedEnv),
     ...buildZCodeToolEnvPassthroughEnv(rawInheritedEnv),
@@ -599,9 +556,6 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
 
   return {
     ...inheritedEnv,
-    // OTLP 凭据只定向传到 host；host 初始化 services 时会立即捕获并从 process.env 清除，
-    // 后续只在启动 Agent 时短暂注入，不会进入 Bash/MCP/tool env。
-    ...agentTelemetryEnv,
     // ZCode 运行时不再使用 NODE_ENV；它会被用户 shell、包管理器和测试框架复用。
     // 这里显式下发 ZCODE_RUNTIME_ENV，并在继承环境里清掉 NODE_ENV，避免 host/agent/Bash 被污染。
     [ZCODE_RUNTIME_ENV_KEY]: resolveHostProcessNodeEnv(),
@@ -617,7 +571,7 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
     // 这里从 main 进程显式下发，agent 子进程继承 host env 后即可稳定写入请求 header。
     [ZCODE_APP_VERSION_ENV]: ZCODE_VERSION,
     // Telemetry 的构建身份必须来自 Desktop 编译期元数据，不能让 Agent 在运行时读取
-    // 工作树或根据安装路径猜测；否则同一产品版本的不同修复包无法在 ARMS 中区分。
+    // 工作树或根据安装路径猜测；否则同一产品版本的不同修复包无法在监控中区分。
     [ZCODE_BUILD_COMMIT_ID_ENV]: ZCODE_COMMIT,
     ...(dataBaseDir !== homedir() ? { ZCODE_DATA_BASE_DIR: dataBaseDir } : {}),
     ...(windowsAppInstallDir ? { [ZCODE_WINDOWS_APP_INSTALL_DIR_ENV]: windowsAppInstallDir } : {}),

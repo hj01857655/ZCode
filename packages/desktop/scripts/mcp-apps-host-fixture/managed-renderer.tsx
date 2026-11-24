@@ -62,7 +62,6 @@ const agent = {
   onDynamicPluginUiToolResult: () => (handler: any) => subscribe("ui-result", handler),
   onDynamicConversationFrame: () => (handler: any) => subscribe("frame", handler),
   onDynamicSessionLifecycle: () => (handler: any) => subscribe("session-lifecycle", handler),
-  onDynamicLocalTtftFacts: () => (handler: any) => subscribe("ttft", handler),
   onAgentRuntimeRestarted: (handler: any) => subscribe("restart", handler),
   onAgentRuntimeLifecycle: (handler: any) => subscribe("lifecycle", handler),
 };

@@ -299,7 +299,7 @@ async function ensureDeviceMidInLockedState(
   }
 
   // device_mid 独立生成，不再复用首条事件的 eventId：让它表达「设备标识」而非
-  // 「某次上报」，并与 ARMS 侧（desktopDeviceMid）读取的同一字段保持同值。
+  // 「某次上报」，并与上报侧（desktopDeviceMid）读取的同一字段保持同值。
   const deviceMid = (options.randomUUID ?? createUuid)();
   state.deviceMid = deviceMid;
   await writeTelemetryState(state, options.homeDir);

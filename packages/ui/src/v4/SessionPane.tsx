@@ -18,7 +18,6 @@ import { resolveSelectionSideInheritedModel } from "@/lib/selectionSideInherited
 import { useStartPlanRecommendation } from "@/hooks/useStartPlanRecommendation.js";
 import type { SessionCreateSource } from "@zcode/shared";
 import { reportSessionCreate } from "@/lib/sessionCreateTelemetry.js";
-import { getLocalTtftObserver } from "@/v4/telemetry/local-ttft/contract.js";
 import { BotGroupDeliveryProvider } from "@/v4/BotGroupDeliveryAction.js";
 /* oxlint-disable eslint(max-lines) -- SessionPane 是单 pane 竖切的命令编排收口（订阅/发送/停止/fork/edit/retry/queue/slash 全集），与旧 ChatView 同粒度；HEAD 已超限（693 行计数），拆散命令组会打散 dispatchCommand/snapshotRef 的闭包纪律。 */
 import { useOptionalProjectDirectoryActions } from "@/project-sidebar/index.js";
@@ -2385,25 +2384,11 @@ export function SessionPane({
         }
         let ack: CommandAck;
         try {
-          if (telemetrySeed?.localTtft && !workspaceIdentity?.trim()) {
-            envelope.ttft = getLocalTtftObserver()?.dispatch(
-              telemetrySeed.localTtft,
-              workspacePath,
-              envelope.commandId,
-              targetSessionId,
-            );
-          }
           ack =
             projectId !== undefined
               ? await sendCommand(envelope, { projectId })
               : await sendCommand(envelope);
-          if (telemetrySeed?.localTtft && ack.reasonCode === "guard.heldQueueConfirmationStale")
-            getLocalTtftObserver()?.confirmationRetry(telemetrySeed.localTtft);
-          else if (telemetrySeed?.localTtft)
-            getLocalTtftObserver()?.ack(telemetrySeed.localTtft, ack.status, ack.ttftExcluded);
         } catch (error) {
-          if (telemetrySeed?.localTtft)
-            getLocalTtftObserver()?.exclude(telemetrySeed.localTtft, "failed");
           if (commandLease) {
             commandLease.store.settleCommand(envelope.commandId);
           }
@@ -4543,10 +4528,8 @@ export function SessionPane({
         latest.revision,
         latest.logEpoch,
         // Bug 根因：编辑重发曾不带 seed，这一轮没有 send_btn / completion / agent_step。
-        // localTtft 维持原口径不纳入编辑轮。
         telemetrySeed && {
           ...telemetrySeed,
-          localTtft: undefined,
           extraDetail: { ...telemetrySeed.extraDetail, send_type: "edit" },
         },
         highspeed.acceleratedCard,

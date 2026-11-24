@@ -195,7 +195,7 @@ export function registerRemoteIpcHandlers(options: {
     syncRendererContext(payload: { rendererId: number; context: unknown }): void;
     onOAuthCallbackHandled(payload: { rendererId: number }): void;
   };
-  /** OAuth 回调处理完成后的额外副作用（如刷新 ARMS user.id）；不影响既有 runtime 流程 */
+  /** OAuth 回调处理完成后的额外副作用；不影响既有 runtime 流程 */
   onOAuthCallbackHandledSideEffect?: () => void;
   appTelemetryCore: {
     reportEvent(payload: unknown): Promise<void>;
@@ -365,7 +365,7 @@ export function registerRemoteIpcHandlers(options: {
     await options.appTelemetryCore.reportEvent(result.data);
   });
 
-  // ReportArmsCustomEvent 通道已随 ARMS 遥测移除：不再注册 handler。
+  // ReportArmsCustomEvent 通道已随遥测移除：不再注册 handler。
 
   ipcMain.on(PlatformChannels.OAuthCallbackHandled, (event) => {
     options.appTelemetryRuntime.onOAuthCallbackHandled({

@@ -1,5 +1,3 @@
-import type { RendererActionTraceGroup } from "@zcode/shared";
-
 export const CORE_USER_ACTION_FEATURES = {
   "workspace.local.lifecycle": ["open", "switch", "close"],
   "workspace.remote.lifecycle": ["open_dialog", "connect", "reconnect", "disconnect"],
@@ -110,7 +108,7 @@ export type UserActionOperationKind =
 export interface UserActionCatalogEntry {
   featureId: UserActionFeatureId;
   action: string;
-  group: Extract<RendererActionTraceGroup, "core" | "settings">;
+  group: "core" | "settings";
   operationKind: UserActionOperationKind;
   surface: string;
   timeoutMs: number;

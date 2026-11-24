@@ -285,7 +285,7 @@ const errorLog = (...args: unknown[]) => serviceLog.error(undefined, ...args);
 
 // 裸 key 和凭据必须在跨进程诊断和生产日志之前遮盖。规则与 desktop main 上报前共用一份：
 // 这里曾自带一套、先做赋值替换，把 `Authorization: Bearer <token>` 的 `Bearer` 换掉后，
-// main 再也认不出 token，token 随 errorStack 上报到 ARMS。
+// main 再也认不出 token，token 随 errorStack 上报。
 function redactAgentDiagnostic(value: string): string {
   return redactAgentDiagnosticSecrets(value);
 }
