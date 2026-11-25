@@ -148,7 +148,13 @@ async function build(outputDir, targetArch, source, deadline) {
       ],
       deadline,
     );
-    await runCmake(command, ["--build", buildDir, "--config", "Release"], deadline);
+    // 构建目录是每次新建的临时目录，不依赖增量生成；关掉 MSBuild 的 MSB8029（临时目录提示），
+    // 否则每个 vcxproj 都会刷一条对一次性构建无意义的警告。
+    await runCmake(
+      command,
+      ["--build", buildDir, "--config", "Release", "--", "/p:IgnoreWarnIntDirInTempDetected=true"],
+      deadline,
+    );
     const bytes = await readFile(join(builtDir, outputName));
     verifyPe(bytes, targetArch);
     if ((await sourceDigest()) !== source)

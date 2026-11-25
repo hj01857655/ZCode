@@ -79,6 +79,9 @@ export async function buildRuntimeHost({ arch, outputDir }) {
   const work = await mkdtemp(join(tmpdir(), "zcode-runtime-host-"));
   try {
     await run(["-S", source, "-B", work, ...plan.configureArgs, "-DCMAKE_BUILD_TYPE=Release"]);
+    // 构建目录是每次新建的临时目录，不依赖增量生成；关掉 MSBuild 的 MSB8029（临时目录提示），
+    // 否则每个 vcxproj 都会刷一条对一次性构建无意义的警告。
+    // 该开关只属于 MSBuild 生成器，非 Windows 宿主的 MinGW 交叉编译不能带。
     await run([
       "--build",
       work,
@@ -87,6 +90,7 @@ export async function buildRuntimeHost({ arch, outputDir }) {
       "--target",
       "zcode-runtime-host",
       "zcode-installer-process-helper",
+      ...(process.platform === "win32" ? ["--", "/p:IgnoreWarnIntDirInTempDetected=true"] : []),
     ]);
     const releaseDir = join(work, ...(process.platform === "win32" ? ["Release"] : []));
     const hostBytes = await readFile(join(releaseDir, "zcode-runtime-host.exe"));
