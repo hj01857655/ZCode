@@ -99,13 +99,6 @@ const commandStdoutMaxBuffer = 64 * 1024 * 1024;
 const requiredRuntimeModules = [
   "module-details-from-path",
   "pngjs",
-  // Bugfix: telemetry 的 OTLP exporter 在启动阶段依赖 sdk-metrics；开发态 hoist 会掩盖
-  // electron-builder 漏包。最终产物必须机械校验该闭包，禁止可生成但无法启动的安装包流出。
-  "@opentelemetry/sdk-metrics",
-  // 与 afterPack 注入名单同口径：校验 OTLP proto 导出链（exporter → otlp-transformer → protobufjs）完整进包，
-  // 缺包产物在打包阶段直接失败，而不是等安装后启动崩溃。
-  "@opentelemetry/exporter-trace-otlp-proto",
-  "@opentelemetry/exporter-metrics-otlp-proto",
   // Bugfix: @babel/runtime 被在包库运行时 require（peer 闭包），缺它安装包启动即崩，
   // 这里把 @babel/runtime 纳入 bundle 后机械校验，防止坏包继续流出。
   "@babel/runtime",

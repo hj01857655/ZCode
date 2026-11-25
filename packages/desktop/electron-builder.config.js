@@ -108,17 +108,6 @@ const asarCliPath = resolve(
 );
 const REQUIRED_ASAR_RUNTIME_MODULES = [
   "module-details-from-path",
-  "@opentelemetry/api-logs",
-  // Bugfix: telemetry 的 OTLP exporter 会在启动阶段加载 sdk-metrics。pnpm 开发态可从
-  // workspace 根目录解析，但 electron-builder 不会稳定复制这条 hoisted 依赖，导致安装包启动即崩溃。
-  // 将 sdk-metrics 作为闭包根注入，同时递归带齐它的 OpenTelemetry 运行时依赖。
-  "@opentelemetry/sdk-metrics",
-  // Bugfix：主进程的本地 TTFT / renderer 动作追踪导出器使用 OTLP proto 导出链。pnpm hoisted 布局下
-  // electron-builder 会把 otlp-transformer 打进 app.asar，却漏拷其传递依赖 protobufjs，已安装应用启动即报
-  // Cannot find module protobufjs/minimal（开源侧 3.14.0 arm64 DMG 实测复现）。以两个 proto exporter
-  // 作为闭包根注入，递归带齐 otlp-transformer、protobufjs 与 @protobufjs/* 全链。
-  "@opentelemetry/exporter-trace-otlp-proto",
-  "@opentelemetry/exporter-metrics-otlp-proto",
   "pngjs",
   // Bugfix: @babel/runtime 被在包库运行时 require，electron-builder 重打 app.asar 时
   // 不一定稳定带上这个 peer 运行时；线上已出现安装包启动即报
