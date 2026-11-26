@@ -1,3 +1,5 @@
+# 本地运行时日志（dev 启动、打包终端输出、lint/typecheck gate 输出），不入库。
+logs/
 node_modules/
 dist/
 # zcode-server-cli 发行包 staging 输出（spec §7.1），本地组装产物不入库。
@@ -63,6 +65,20 @@ binding.Makefile
 # pattern 生效而被拦住），CI 第一站直接红。加 **/ 让忽略范围与门禁范围对齐。
 **/build/Makefile
 **/build/Release/*.node
+# 例外：ZCode 官方 CUA Helper 的 Windows 运行时产物是**官方原件**（sha256 由
+# packages/zcode-cua/runtime-manifest.json 声明），不是本地构建产物，必须入库，
+# 否则开源树重新打包时拿不到执行层。自研的 ax_native.cc 编译产物仍在上一条规则内。
+# gitignore 的 "!" 例外不会越过被忽略的父目录，必须逐级取消。
+!packages/zcode-cua/build/
+!packages/zcode-cua/build/Release/
+!packages/zcode-cua/build/Release/ax_native.node
+# 同理：官方 helper 的 entry（dist/windows-helper.js）与官方契约要求的
+# dist/frame-contract/index.* 入口都要入库。
+!packages/zcode-cua/dist/
+!packages/zcode-cua/dist/frame-contract/
+!packages/zcode-cua/dist/frame-contract/index.js
+!packages/zcode-cua/dist/frame-contract/index.d.ts
+!packages/zcode-cua/dist/windows-helper.js
 
 # CUA 权限浮窗吸附用的 Swift 辅助二进制（由 prepare:macos-window-bounds 从
 # packages/desktop/native/macos-window-bounds/main.swift 编出，源码入库、产物不入库）
