@@ -8,5 +8,19 @@
     "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.formatOnSave": true
   },
-  "cmake.sourceDirectory": "${workspaceFolder}/scripts/native-search-tools-windows"
+  "cmake.sourceDirectory": "${workspaceFolder}/scripts/native-search-tools-windows",
+  // 打包产物由 electron-builder 反复删除/覆盖；IDE 文件索引一旦持有 asar/pe 句柄，
+  // 打包与清理就会卡在 EBUSY 并触发 30s 重试，因此产物目录整体退出监视与搜索。
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/bundled-tools/**": true,
+    "**/*.asar": true,
+    "**/.turbo/**": true
+  },
+  "search.exclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/bundled-tools/**": true
+  }
 }
