@@ -346,7 +346,9 @@ export function InlineEditableProviderCard({
             ...(target.draftOwnsRetry
               ? {}
               : {
-                  actionLabel: notification.formatMessage({ id: "common.retry" }),
+                  actionLabel: notification.formatMessage({
+                    id: "common.retry",
+                  }),
                   onAction: () => {
                     void runSaveOperation(operation, target).catch(() => undefined);
                   },
@@ -709,7 +711,11 @@ export function InlineEditableProviderCard({
   const handleAddModel = useCallback(
     async (model: ProviderSettingsFormModel) => {
       if (!onAddPersonalModel) throw new Error("当前设置入口未装配 Personal Model 添加能力");
-      const added = { ...model, modelId: model.modelId.trim(), hasPersonalConfig: true };
+      const added = {
+        ...model,
+        modelId: model.modelId.trim(),
+        hasPersonalConfig: true,
+      };
       if (!added.modelId) return;
       await runSaveOperation(
         async () => {
@@ -875,6 +881,7 @@ export function InlineEditableProviderCard({
                 apiFormat={apiFormat}
                 baseUrl={baseUrlValue}
                 apiKey={apiKeyValue}
+                headers={provider.config.api?.headers ?? undefined}
                 existingModelIds={models.map((model) => model.modelId)}
                 onAddModels={handleAddModelIds}
               />

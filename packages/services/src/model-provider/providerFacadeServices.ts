@@ -95,6 +95,8 @@ export interface FetchProviderModelIdsRequest {
   readonly apiFormat: ProviderApiType;
   readonly baseUrl: string;
   readonly apiKey: string;
+  /** Provider 配置的自定义请求头；模型执行链路会带上，缺了需要额外头的 endpoint 会鉴权失败。 */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export type ProviderModelListTester = (
@@ -225,9 +227,12 @@ export function createProviderSettingsService(
       if (!fetchModelList) {
         throw new Error("当前 Environment 未装配模型列表拉取能力");
       }
-      if (!input.baseUrl.trim()) throw new Error("empty-base-url");
-      if (!input.apiKey.trim()) throw new Error("empty-api-key");
-      return fetchModelList(input);
+      // 表单输入可能带粘贴进来的首尾空白；校验和实际请求都必须用同一份归一化值。
+      const baseUrl = input.baseUrl.trim();
+      const apiKey = input.apiKey.trim();
+      if (!baseUrl) throw new Error("empty-base-url");
+      if (!apiKey) throw new Error("empty-api-key");
+      return fetchModelList({ ...input, apiKey, baseUrl });
     },
   };
 }

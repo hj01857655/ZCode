@@ -187,13 +187,12 @@ function resolveModelsUrl(baseUrl: string): string {
 }
 
 function resolveModelListHeaders(input: FetchProviderModelIdsRequest): Record<string, string> {
-  if (input.apiFormat === "anthropic-messages") {
-    return {
-      "x-api-key": input.apiKey,
-      "anthropic-version": "2023-06-01",
-    };
-  }
-  return { Authorization: `Bearer ${input.apiKey}` };
+  const authHeaders: Record<string, string> =
+    input.apiFormat === "anthropic-messages"
+      ? { "x-api-key": input.apiKey, "anthropic-version": "2023-06-01" }
+      : { Authorization: `Bearer ${input.apiKey}` };
+  // 与模型执行链路一致：Provider 自定义头后合并，允许覆盖默认鉴权头。
+  return { ...authHeaders, ...input.headers };
 }
 
 function extractModelIds(body: unknown): string[] | null {

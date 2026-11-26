@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderApiType } from "@zcode/provider";
 import { Button } from "@/components/ui/button.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogTitle,
-} from "@/components/ui/dialog.js";
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useFetchProviderModelIds } from "@/hooks/useModelProviders.js";
@@ -19,12 +14,15 @@ export function FetchModelsButton({
   apiFormat,
   baseUrl,
   apiKey,
+  headers,
   existingModelIds,
   onAddModels,
 }: {
   apiFormat: ProviderApiType;
   baseUrl: string;
   apiKey: string;
+  /** Provider 配置的自定义请求头；真实模型请求同样会带，拉列表时不能丢。 */
+  headers?: Readonly<Record<string, string>>;
   existingModelIds: readonly string[];
   onAddModels: (modelIds: string[]) => Promise<void>;
 }) {
@@ -37,8 +35,6 @@ export function FetchModelsButton({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const fetchProviderModelIds = useFetchProviderModelIds();
   const requestIdRef = useRef(0);
-
-  const existing = new Set(existingModelIds);
 
   useEffect(() => {
     return () => {
@@ -64,8 +60,16 @@ export function FetchModelsButton({
     setCandidates([]);
     setSelected(new Set());
     try {
-      const ids = await fetchProviderModelIds({ apiFormat, baseUrl, apiKey });
+      const ids = await fetchProviderModelIds({
+        apiFormat,
+        baseUrl,
+        apiKey,
+        headers,
+      });
       if (requestId !== requestIdRef.current) return;
+      // 必须读本次渲染的 existingModelIds：导入后父级会传新数组，闭包里不能沿用旧快照，
+      // 否则再次拉取会把已导入的模型当成候选重复展示。
+      const existing = new Set(existingModelIds);
       const fresh = ids.filter((id) => !existing.has(id));
       setCandidates(fresh);
       setSelected(new Set(fresh));
@@ -76,9 +80,7 @@ export function FetchModelsButton({
     } finally {
       if (requestId === requestIdRef.current) setFetching(false);
     }
-    // existing 是渲染期快照，拉取一次即走，不需要进依赖。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiFormat, baseUrl, apiKey, fetchProviderModelIds]);
+  }, [apiFormat, baseUrl, apiKey, headers, existingModelIds, fetchProviderModelIds]);
 
   const handleImport = useCallback(async () => {
     setImporting(true);
@@ -126,16 +128,22 @@ export function FetchModelsButton({
           aria-describedby={undefined}
         >
           <DialogTitle>
-            {intl.formatMessage({ id: "settings.modelProvider.fetchModels.title" })}
+            {intl.formatMessage({
+              id: "settings.modelProvider.fetchModels.title",
+            })}
           </DialogTitle>
           <div className="max-h-[45vh] space-y-1 overflow-y-auto">
             {fetching ? (
               <div className="text-ui-base text-foreground-subtle">
-                {intl.formatMessage({ id: "settings.modelProvider.fetchModels.loading" })}
+                {intl.formatMessage({
+                  id: "settings.modelProvider.fetchModels.loading",
+                })}
               </div>
             ) : candidates.length === 0 && !error ? (
               <div className="text-ui-base text-foreground-subtle">
-                {intl.formatMessage({ id: "settings.modelProvider.fetchModels.empty" })}
+                {intl.formatMessage({
+                  id: "settings.modelProvider.fetchModels.empty",
+                })}
               </div>
             ) : (
               candidates.map((id) => (
@@ -158,10 +166,7 @@ export function FetchModelsButton({
               className="text-ui-sm text-destructive"
               data-testid="model-provider-fetch-models-error"
             >
-              {intl.formatMessage(
-                { id: "settings.modelProvider.fetchModels.error" },
-                { error },
-              )}
+              {intl.formatMessage({ id: "settings.modelProvider.fetchModels.error" }, { error })}
             </div>
           ) : null}
           <DialogFooter>
