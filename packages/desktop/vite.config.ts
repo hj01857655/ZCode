@@ -192,7 +192,10 @@ export default defineConfig(({ command, mode }) => {
     env.VITE_CODING_PLAN_WEBVIEW_ORIGIN ?? process.env.VITE_CODING_PLAN_WEBVIEW_ORIGIN ?? "";
   const plugins = [
     // 仅开发服务器装配，所有 build 都不注入；后端 ZCODE_ENV 不决定是否开启开发工具。
-    ...(command === "serve" && mode !== "production" && env.ZCODE_REACT_SCAN !== "0"
+    // 默认关闭、只有显式 ZCODE_REACT_SCAN=1 才注入：Scan 会 hook 每次 React commit 并在右下角
+    // 挂常驻工具栏，对不排查渲染问题的开发只有开销和遮挡。此前写成 `!== "0"`，等于未设置时
+    // 默认开启、任何其它取值也都开启。
+    ...(command === "serve" && mode !== "production" && env.ZCODE_REACT_SCAN === "1"
       ? [createReactScanDevPlugin()]
       : []),
     ...(e2eCoverageEnabled ? [createE2EUIRendererCoveragePlugin(repoRoot)] : []),

@@ -165,9 +165,15 @@ describe("desktop React Scan development tools", () => {
     return result?.config.plugins?.flat().find((plugin) => plugin?.name === "zcode:react-scan");
   }
 
-  it("serves Scan before React only in the main development entry", async () => {
+  it("keeps Scan out of the development entry by default", async () => {
     vi.stubEnv("ZCODE_ENV", "production");
     vi.stubEnv("ZCODE_REACT_SCAN", undefined);
+    expect(await loadReactScanPlugin("serve", "development")).toBeUndefined();
+  });
+
+  it("serves Scan before React when explicitly enabled in the main development entry", async () => {
+    vi.stubEnv("ZCODE_ENV", "production");
+    vi.stubEnv("ZCODE_REACT_SCAN", "1");
     const plugin = await loadReactScanPlugin("serve", "development");
     expect(plugin).toBeDefined();
     const server = await createServer({
@@ -194,8 +200,13 @@ describe("desktop React Scan development tools", () => {
     }
   });
 
-  it("allows opting out of development instrumentation", async () => {
-    vi.stubEnv("ZCODE_REACT_SCAN", "0");
+  it.each([
+    ["0"],
+    ["true"],
+    ["yes"],
+    [""],
+  ])("does not treat ZCODE_REACT_SCAN=%j as enabling development instrumentation", async (scan) => {
+    vi.stubEnv("ZCODE_REACT_SCAN", scan);
     expect(await loadReactScanPlugin("serve", "development")).toBeUndefined();
   });
 

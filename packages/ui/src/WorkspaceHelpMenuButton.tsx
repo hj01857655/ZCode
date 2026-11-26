@@ -17,6 +17,7 @@ import {
   UsersIcon,
   RefreshCwIcon,
   ShieldAlertIcon,
+  WrenchIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -171,6 +172,19 @@ export function WorkspaceHelpMenuButton({
                 <DownloadIcon className="size-4" />
                 {intl.formatMessage({ id: "preinstalledTools.title" })}
               </DropdownMenuItem>
+              {/* Windows/Linux 没有原生菜单栏，箭头菜单也已下线，这里是开发者工具唯一的菜单入口。
+                  只在本地开发运行形态渲染：该值由 renderer 的编译期 define 注入，打包版恒为 false。 */}
+              {platform.isLocalDevelopmentRuntime === true ? (
+                <DropdownMenuItem
+                  data-testid="workspace-help-menu-toggle-dev-tools"
+                  onSelect={() =>
+                    void platform.executeDesktopCommand(DesktopCommandIds.ToggleDevTools)
+                  }
+                >
+                  <WrenchIcon className="size-4" />
+                  {intl.formatMessage({ id: "titleBar.menu.help.toggleDevTools" })}
+                </DropdownMenuItem>
+              ) : null}
               {updateMenu.visible ? (
                 <DropdownMenuItem
                   disabled={updateMenu.disabled}

@@ -10,7 +10,8 @@ Windows/Linux 桌面端曾在右上角自绘标题栏放一个箭头合并菜单
 
 - 桌面端三个平台与 Web 端右上角都只显示问号帮助菜单，问号按钮的挂载位置由 `WorkspaceHeaderActionSection` / `SettingsPage` 控制。
 - 第一组：产品文档、用户社群、问题上报、给产品提需求。
-- 一条分隔线后为桌面专属组：导出日志、资源管理器、检查更新、关于 ZCode。检查更新仅 production 显示，Preview 隐藏；关于为最后一项。沿用原有命令；下载完成时显示「重启更新」/「Restart to update」和独立版本 pill。
+- 一条分隔线后为桌面专属组：导出日志、复制设备 MID、资源管理器、预装工具、检查更新、关于 ZCode。检查更新仅 production 显示，Preview 隐藏；关于为最后一项。沿用原有命令；下载完成时显示「重启更新」/「Restart to update」和独立版本 pill。
+- 仅本地开发运行形态（`platform.isLocalDevelopmentRuntime`，由 renderer 的 `__ZCODE_LOCAL_DEVELOPMENT_RUNTIME__` 注入，打包版恒为 false）在「预装工具」与「检查更新」之间多一项「切换开发者工具」，转发既有 `ToggleDevTools` 命令。Windows/Linux 没有原生菜单栏，这是这两个平台上开发者工具唯一的菜单入口；不新增 desktop command，不新增文案 key（复用 `titleBar.menu.help.toggleDevTools`）。
 - 导出日志复用系统菜单的主进程导出实现，UI 通过共享帮助动作显示导出中及失败提示；问题上报仍保持 `includeLogs=true`。Web 无桌面组和分隔线。
 
 ## 实现约束

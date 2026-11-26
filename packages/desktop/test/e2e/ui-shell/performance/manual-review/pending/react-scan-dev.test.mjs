@@ -61,8 +61,10 @@ test(
     `,
       );
 
-      for (const enabled of [true, false]) {
-        process.env.ZCODE_REACT_SCAN = enabled ? "1" : "0";
+      // 三档：显式开启；显式关闭；未设置（默认关闭，2026-11 起 Scan 不再默认注入）。
+      for (const enabled of [true, false, undefined]) {
+        if (enabled === undefined) delete process.env.ZCODE_REACT_SCAN;
+        else process.env.ZCODE_REACT_SCAN = enabled ? "1" : "0";
         server = await createServer({
           configFile: resolve(desktopRoot, "vite.config.ts"),
           root: fixtureRoot,
