@@ -14,7 +14,6 @@ import {
   type TaskStreamMirrorOp,
   type TaskStreamMirrorPublishOp,
   type TaskStreamWatermark,
-  formatZodError,
   HostMessageTypes,
   HostResponseTypes,
   hostResponseMessageSchema,
@@ -233,10 +232,7 @@ export class TaskRealtimeBus {
   private handleHostMessage(hostId: string, message: unknown): void {
     const parsed = hostResponseMessageSchema.safeParse(message);
     if (!parsed.success) {
-      this.logger.warn(
-        "[task-realtime] invalid host response message:",
-        formatZodError(parsed.error),
-      );
+      // 共享 parentPort 上还有 extension-host 等其它监听者的消息；它们不属于本通道，静默忽略。
       return;
     }
 

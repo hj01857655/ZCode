@@ -56,7 +56,7 @@ export class BroadcastHub {
     child.on("message", (msg: unknown) => {
       const result = hostResponseMessageSchema.safeParse(msg);
       if (!result.success) {
-        logger.warn("[BroadcastHub] invalid host response message:", formatZodError(result.error));
+        // 共享 parentPort 上还有 extension-host 等其它监听者的消息；它们不属于本通道，静默忽略。
         return;
       }
       if (result.data.type === HostResponseTypes.Broadcast) {
