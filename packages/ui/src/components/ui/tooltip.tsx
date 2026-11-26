@@ -11,7 +11,9 @@ function TooltipProvider({
   delayDuration = 0,
   alwaysDelay,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Provider> & { alwaysDelay?: boolean }) {
+}: React.ComponentProps<typeof TooltipPrimitive.Provider> & {
+  alwaysDelay?: boolean;
+}) {
   const inheritedDelay = React.useContext(TooltipHoverDelayContext);
   return (
     <TooltipHoverDelayContext.Provider
@@ -26,9 +28,41 @@ function TooltipProvider({
   );
 }
 
-function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+function Tooltip({
+  open,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
   const hoverDelay = React.useContext(TooltipHoverDelayContext);
-  const tooltip = <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
+  // Radix 以 open 是否为 undefined 判定受控；运行中在受控/非受控间切换会触发
+  // controlled/uncontrolled 告警。这里始终传布尔值，未传 open 时用本地状态跟随 Radix 的开关，
+  // 语义与原非受控一致。
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  // 调用方重新接管（open 变回布尔）时清掉镜像状态；否则恢复非受控后会沿用
+  // 接管前的旧值，出现不悬停也弹提示的残留。
+  React.useEffect(() => {
+    if (open !== undefined) {
+      setUncontrolledOpen(false);
+    }
+  }, [open]);
+  const resolvedOpen = open ?? uncontrolledOpen;
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      if (open === undefined) {
+        setUncontrolledOpen(nextOpen);
+      }
+      onOpenChange?.(nextOpen);
+    },
+    [open, onOpenChange],
+  );
+  const tooltip = (
+    <TooltipPrimitive.Root
+      data-slot="tooltip"
+      {...props}
+      open={resolvedOpen}
+      onOpenChange={handleOpenChange}
+    />
+  );
   // Radix 的 skipDelayDuration=0 仍在下一轮 timer 才清除快速打开状态；
   // 同次指针移动切到相邻按钮会立即显示。严格延迟范围内让各提示独立使用 Radix 计时。
   return hoverDelay === undefined ? (

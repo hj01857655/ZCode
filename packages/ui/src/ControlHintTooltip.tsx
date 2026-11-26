@@ -26,6 +26,8 @@ interface ControlHintTooltipProps {
   shortcut?: string;
   standalone?: boolean;
   open?: boolean;
+  /** 强制关闭并抑制提示（如所属菜单已打开）；与 open 同时存在时以关闭为准。 */
+  suppressed?: boolean;
   onOpenChange?: (open: boolean) => void;
   side?: ComponentProps<typeof TooltipContent>["side"];
   align?: ComponentProps<typeof TooltipContent>["align"];
@@ -60,6 +62,7 @@ export function ControlHintTooltip({
   shortcut,
   standalone = false,
   open,
+  suppressed = false,
   onOpenChange,
   side = "top",
   align = "center",
@@ -99,7 +102,7 @@ export function ControlHintTooltip({
   // 大会话会为每条消息动作渲染大量 ControlHintTooltip，逐个创建 Provider
   // 会把 Radix 上下文树放大到消息数量级；共享 Provider 统一放在 Root。
   const tooltip = (
-    <Tooltip open={open} onOpenChange={onOpenChange}>
+    <Tooltip open={suppressed ? false : open} onOpenChange={onOpenChange}>
       <TooltipTrigger asChild>{trigger}</TooltipTrigger>
       <TooltipContent
         align={align}
@@ -165,7 +168,11 @@ export function SidebarNativeTooltip({
   children,
   ...triggerProps
 }: Omit<ComponentProps<typeof Slot.Root>, "children"> & {
-  children: ReactElement<{ title?: string; disabled?: boolean; className?: string }>;
+  children: ReactElement<{
+    title?: string;
+    disabled?: boolean;
+    className?: string;
+  }>;
 }) {
   const inSidebar = useContext(SidebarTooltipContext);
   if (!inSidebar || !children.props.title)

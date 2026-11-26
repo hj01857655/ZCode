@@ -258,7 +258,12 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
   leadingItems,
   triggerBadge,
 }: ModelConfigSelectProps) {
-  const presentation = useRef({ composerOptions, modelGroups, normalizedValue, triggerLabel });
+  const presentation = useRef({
+    composerOptions,
+    modelGroups,
+    normalizedValue,
+    triggerLabel,
+  });
   if (
     composerOptions?.providerMenu?.pending &&
     presentation.current.composerOptions?.providerMenu
@@ -278,7 +283,13 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
     modelGroups = previous.modelGroups;
     normalizedValue = previous.normalizedValue;
     triggerLabel = previous.triggerLabel;
-  } else presentation.current = { composerOptions, modelGroups, normalizedValue, triggerLabel };
+  } else
+    presentation.current = {
+      composerOptions,
+      modelGroups,
+      normalizedValue,
+      triggerLabel,
+    };
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -739,7 +750,8 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
           shortcut={guideOpen ? undefined : shortcutLabel}
           triggerRef={triggerRef}
           // 菜单打开时 Tooltip 不能再成为最上层；否则 Escape 只关闭提示，菜单仍锁住指针。
-          open={open ? false : guideOpen ? true : undefined}
+          open={guideOpen ? true : undefined}
+          suppressed={open}
           // 引导气泡比按钮宽：居中会越过输入框右边缘、在手机上贴住屏幕边。改为右边缘对齐按钮、
           // 向输入区内侧展开，离视口至少 8px，宽度不超过可用空间，长文案在气泡内换行。
           align={guideOpen ? "end" : undefined}

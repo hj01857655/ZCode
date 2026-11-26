@@ -80,11 +80,16 @@ function V4ComposerModeSwitchImpl({
     permissions.find((mode) => mode.id === draftConfig?.mode) ??
     (draftConfig?.mode === "edit" ? { id: "edit", name: "Edit" } : undefined);
   const label = (mode: (typeof modes)[number]) =>
-    getModeOptionDisplayLabel(intl, displayProvider, { value: mode.id, name: mode.name });
+    getModeOptionDisplayLabel(intl, displayProvider, {
+      value: mode.id,
+      name: mode.name,
+    });
   const plan = modes.find((mode) => mode.id === "plan")!;
   const planLabel = label(plan);
   // Plan 拆成独立勾选项后仍需保留原菜单说明，复用相同的国际化映射。
-  const planDescriptionId = getModeOptionDescriptionMessageId(displayProvider, { value: plan.id });
+  const planDescriptionId = getModeOptionDescriptionMessageId(displayProvider, {
+    value: plan.id,
+  });
   const modeOption = useMemo<ZCodeConfigOption>(
     () => ({
       id: "mode",
@@ -122,7 +127,7 @@ function V4ComposerModeSwitchImpl({
         <ControlHintTooltip
           title={intl.formatMessage({ id: "chat.toolbar.mode.label" })}
           shortcut={modeShortcutLabel}
-          open={activeConfigPicker === "mode" ? false : undefined}
+          suppressed={activeConfigPicker === "mode"}
         >
           <DropdownMenuTrigger asChild>
             <Button

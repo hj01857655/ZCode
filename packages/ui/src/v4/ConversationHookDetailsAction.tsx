@@ -92,7 +92,9 @@ const HookStatusIcon = memo(function HookStatusIcon({ status }: { status: HookDe
 
 const HookDetailItemRow = memo(function HookDetailItemRow({ item }: { item: HookDetailItem }) {
   const { intl } = useZCodeIntl();
-  const sourceLabel = intl.formatMessage({ id: `chat.hooks.source.${item.sourceKind}` });
+  const sourceLabel = intl.formatMessage({
+    id: `chat.hooks.source.${item.sourceKind}`,
+  });
   const durationLabel = item.durationMs === undefined ? null : formatHookDuration(item.durationMs);
   return (
     <li className="min-w-0 px-3 py-1.5 text-ui-sm">
@@ -129,19 +131,14 @@ export const ConversationHookDetailsAction = memo(function ConversationHookDetai
 }) {
   const { intl } = useZCodeIntl();
   const [open, setOpen] = useState(false);
-  // Popover 打开时抑制 Tooltip；Tooltip 必须始终是受控组件，不能在 open 与 undefined 间切换，
-  // 否则 Radix 会在运行中发出 controlled/uncontrolled 警告。
-  const [tooltipOpen, setTooltipOpen] = useState(false);
   const items = useMemo(() => buildHookDetailItems(rows), [rows]);
   if (items.length === 0) return null;
 
   const label = intl.formatMessage({ id: "chat.hooks.label" });
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip
-        open={open ? false : tooltipOpen}
-        onOpenChange={(nextOpen) => setTooltipOpen(nextOpen && !open)}
-      >
+      {/* Popover 打开时抑制提示；Tooltip 封装内部始终传受控值，undefined 不会再触发 Radix 告警。 */}
+      <Tooltip open={open ? false : undefined}>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
             <Button
