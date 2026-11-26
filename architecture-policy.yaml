@@ -2011,6 +2011,10 @@ global:
   acceptedUpstreamSnapshot: scripts/architecture/upstream-snapshot.json
 
 exceptions:
+  - id: fetch-models-existing-provider-card-size
+    rule: max-file-lines
+    paths: [ packages/ui/src/settings/model-provider-section/InlineEditableProviderCard.tsx ]
+    reason: 该文件在 HEAD 已是 881 行；本次仅在既有 provider 卡片内替换模型列表按钮的添加回调，不改变模块所有权或拆分成新的写入路径。
   - id: region-copy-suggested-prompts-edit
     rule: unmanaged-new-file
     paths: [ packages/ui/src/v4/featureSuggestedPrompts.ts ]

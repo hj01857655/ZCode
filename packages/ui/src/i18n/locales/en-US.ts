@@ -5236,6 +5236,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.addModel": "Add model",
   "settings.modelProvider.fetchModels": "Fetch models",
   "settings.modelProvider.fetchModels.title": "Select models to import",
+  "settings.modelProvider.fetchModels.loading": "Fetching models...",
   "settings.modelProvider.fetchModels.empty": "The remote endpoint returned no new models (configured ones are filtered out).",
   "settings.modelProvider.fetchModels.error": "Failed to fetch model list: {error}",
   "settings.modelProvider.fetchModels.import": "Import {count} models",

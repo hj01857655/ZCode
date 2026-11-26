@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderApiType } from "@zcode/provider";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -9,64 +9,11 @@ import {
 } from "@/components/ui/dialog.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useFetchProviderModelIds } from "@/hooks/useModelProviders.js";
 
 /**
- * 从 OpenAI 兼容端点或 Anthropic Messages 端点拉取模型列表。
- *
- * 两种 OpenAI 协议共用 GET {baseUrl}/models；Anthropic 是 GET {baseUrl}/v1/models，
- * 鉴权头为 x-api-key + anthropic-version。响应统一按 { data: [{ id }] } 解析，
- * 非 OpenAI 兼容的响应体（没有 data[].id）按失败处理，回退手填。
- */
-export async function fetchProviderModelIds(params: {
-  apiFormat: ProviderApiType;
-  baseUrl: string;
-  apiKey: string;
-}): Promise<string[]> {
-  const { apiFormat, baseUrl, apiKey } = params;
-  const base = baseUrl.trim().replace(/\/+$/, "");
-  if (!base) throw new Error("empty-base-url");
-
-  let url: string;
-  const headers: Record<string, string> = {};
-  if (apiFormat === "anthropic-messages") {
-    url = `${base}/v1/models`;
-    headers["x-api-key"] = apiKey;
-    headers["anthropic-version"] = "2023-06-01";
-  } else {
-    // openai-chat-completions / openai-responses：baseUrl 通常已含 /v1；未含则补。
-    const withV1 = /\/v\d+$/.test(base) ? base : `${base}/v1`;
-    url = `${withV1}/models`;
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  const response = await fetch(url, { headers });
-  if (!response.ok) {
-    throw new Error(`http-${response.status}`);
-  }
-  const body: unknown = await response.json();
-  const ids = extractModelIds(body);
-  if (!ids) throw new Error("unexpected-response");
-  return ids;
-}
-
-function extractModelIds(body: unknown): string[] | null {
-  if (typeof body !== "object" || body === null) return null;
-  const data = (body as { data?: unknown }).data;
-  if (!Array.isArray(data)) return null;
-  const ids: string[] = [];
-  for (const entry of data) {
-    const id =
-      typeof entry === "object" && entry !== null
-        ? (entry as { id?: unknown }).id
-        : undefined;
-    if (typeof id === "string" && id) ids.push(id);
-  }
-  return ids;
-}
-
-/**
- * 「获取模型列表」按钮：拉取远端 /models，勾选后批量导入为 Personal Model。
- * 导入走现有 addModel 链路，personalConfig 留空并保持智能配置，由推荐配置兜底。
+ * 「获取模型列表」按钮：通过 ProviderSettingsService 让 Host 发起远端 /models 请求，
+ * 勾选后批量导入为 Personal Model。请求不落在 renderer，避免 preflight/CORS/CSP 拦截。
  */
 export function FetchModelsButton({
   apiFormat,
@@ -88,29 +35,54 @@ export function FetchModelsButton({
   const [error, setError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const fetchProviderModelIds = useFetchProviderModelIds();
+  const requestIdRef = useRef(0);
 
   const existing = new Set(existingModelIds);
 
+  useEffect(() => {
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    // 输入变化后旧请求即使返回也不能写回候选列表；RPC 本身不可取消，用序号丢弃过期结果。
+    requestIdRef.current += 1;
+    setFetching(false);
+    setError(null);
+    setCandidates([]);
+    setSelected(new Set());
+  }, [apiFormat, baseUrl, apiKey]);
+
   const handleFetch = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setFetching(true);
     setError(null);
+    setOpen(true);
+    setCandidates([]);
+    setSelected(new Set());
     try {
       const ids = await fetchProviderModelIds({ apiFormat, baseUrl, apiKey });
+      if (requestId !== requestIdRef.current) return;
       const fresh = ids.filter((id) => !existing.has(id));
       setCandidates(fresh);
       setSelected(new Set(fresh));
-      setOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (requestId !== requestIdRef.current) return;
+      const message = err instanceof Error ? err.message : String(err);
+      setError(/timeout|aborted/i.test(message) ? "timeout" : message);
     } finally {
-      setFetching(false);
+      if (requestId === requestIdRef.current) setFetching(false);
     }
     // existing 是渲染期快照，拉取一次即走，不需要进依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiFormat, baseUrl, apiKey]);
+  }, [apiFormat, baseUrl, apiKey, fetchProviderModelIds]);
 
   const handleImport = useCallback(async () => {
     setImporting(true);
+    setError(null);
     try {
       await onAddModels([...selected]);
       setOpen(false);
@@ -133,6 +105,8 @@ export function FetchModelsButton({
     });
   };
 
+  const canFetch = Boolean(baseUrl.trim() && apiKey.trim());
+
   return (
     <>
       <Button
@@ -141,7 +115,7 @@ export function FetchModelsButton({
         size="default"
         className="rounded-lg"
         data-testid="model-provider-fetch-models-button"
-        disabled={fetching || !baseUrl.trim()}
+        disabled={fetching || !canFetch}
         onClick={() => void handleFetch()}
       >
         {intl.formatMessage({ id: "settings.modelProvider.fetchModels" })}
@@ -152,7 +126,11 @@ export function FetchModelsButton({
             {intl.formatMessage({ id: "settings.modelProvider.fetchModels.title" })}
           </DialogTitle>
           <div className="max-h-[45vh] space-y-1 overflow-y-auto">
-            {candidates.length === 0 ? (
+            {fetching ? (
+              <div className="text-ui-base text-foreground-subtle">
+                {intl.formatMessage({ id: "settings.modelProvider.fetchModels.loading" })}
+              </div>
+            ) : candidates.length === 0 && !error ? (
               <div className="text-ui-base text-foreground-subtle">
                 {intl.formatMessage({ id: "settings.modelProvider.fetchModels.empty" })}
               </div>
@@ -173,7 +151,10 @@ export function FetchModelsButton({
             )}
           </div>
           {error ? (
-            <div className="text-ui-sm text-destructive">
+            <div
+              className="text-ui-sm text-destructive"
+              data-testid="model-provider-fetch-models-error"
+            >
               {intl.formatMessage(
                 { id: "settings.modelProvider.fetchModels.error" },
                 { error },
@@ -192,7 +173,7 @@ export function FetchModelsButton({
             <Button
               type="button"
               onClick={() => void handleImport()}
-              disabled={importing || selected.size === 0}
+              disabled={importing || fetching || selected.size === 0}
               data-testid="model-provider-fetch-models-import"
             >
               {intl.formatMessage(

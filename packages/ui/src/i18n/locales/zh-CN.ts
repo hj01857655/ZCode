@@ -4883,6 +4883,7 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.addModel": "添加模型",
   "settings.modelProvider.fetchModels": "获取模型列表",
   "settings.modelProvider.fetchModels.title": "选择要导入的模型",
+  "settings.modelProvider.fetchModels.loading": "正在获取模型列表...",
   "settings.modelProvider.fetchModels.empty": "远端没有返回新模型（已配置的模型已过滤）。",
   "settings.modelProvider.fetchModels.error": "拉取模型列表失败：{error}",
   "settings.modelProvider.fetchModels.import": "导入 {count} 个模型",

@@ -3,6 +3,7 @@ import { ServiceChannels } from "@zcode/shared";
 import {
   type ModelConfigObject,
   type ModelId,
+  type ProviderApiType,
   type ModelSelection,
   type ModelSelectionFacade,
   type ModelSelectionView,
@@ -68,6 +69,8 @@ export interface IProviderSettingsService {
   testModelConnectivity(
     input: ProviderSettingsConnectivityRequest,
   ): Promise<ModelConnectivityResult>;
+  /** 从目标 Environment 发起 /models 请求，避开 renderer 的 CORS 与 CSP 限制。 */
+  fetchProviderModelIds(input: FetchProviderModelIdsRequest): Promise<readonly string[]>;
 }
 
 export const IProviderSettingsService = createServiceDescriptor<IProviderSettingsService>(
@@ -87,6 +90,16 @@ export interface ProviderSettingsConnectivityRequest {
   readonly providerId: ProviderId;
   readonly modelId: ModelId;
 }
+
+export interface FetchProviderModelIdsRequest {
+  readonly apiFormat: ProviderApiType;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+}
+
+export type ProviderModelListTester = (
+  input: FetchProviderModelIdsRequest,
+) => Promise<readonly string[]>;
 
 export type ProviderSettingsConnectivityTester = (
   input: ProviderSettingsConnectivityTestInput,
@@ -110,6 +123,7 @@ export function createProviderSettingsService(
   facade: ProviderSettingsFacade,
   ensureReady: () => Promise<void> = async () => {},
   testConnectivity?: ProviderSettingsConnectivityTester,
+  fetchModelList?: ProviderModelListTester,
 ): IProviderSettingsService {
   return {
     onDidChange: toEvent((listener) => facade.onDidChange(listener)),
@@ -205,6 +219,15 @@ export function createProviderSettingsService(
         providerId: input.providerId,
         modelId: input.modelId,
       });
+    },
+    fetchProviderModelIds: async (input) => {
+      await ensureReady();
+      if (!fetchModelList) {
+        throw new Error("当前 Environment 未装配模型列表拉取能力");
+      }
+      if (!input.baseUrl.trim()) throw new Error("empty-base-url");
+      if (!input.apiKey.trim()) throw new Error("empty-api-key");
+      return fetchModelList(input);
     },
   };
 }

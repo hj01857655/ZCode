@@ -19,9 +19,11 @@ import {
 import {
   createModelSelectionService,
   createProviderSettingsService,
+  type FetchProviderModelIdsRequest,
   type IModelSelectionService,
   type IProviderSettingsService,
   type ModelSelectionConfiguredDefaultSource,
+  type ProviderModelListTester,
   type ProviderSettingsConnectivityTester,
 } from "./providerFacadeServices.js";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
@@ -31,6 +33,7 @@ const log = createServiceLogger("provider-runtime");
 export interface ProviderRuntimeOptions extends ProviderConfigRuntimeOptions {
   readonly accountSource?: RefreshableProviderSource<AccountProviderConfigSnapshot>;
   readonly testConnectivity?: ProviderSettingsConnectivityTester;
+  readonly fetchModelList?: ProviderModelListTester;
 }
 
 export interface ProviderRuntimeDependencies {
@@ -38,6 +41,7 @@ export interface ProviderRuntimeDependencies {
   readonly accountSource?: RefreshableProviderSource<AccountProviderConfigSnapshot>;
   readonly disposeAccountSource?: () => void;
   readonly testConnectivity?: ProviderSettingsConnectivityTester;
+  readonly fetchModelList?: ProviderModelListTester;
   readonly modelSelectionConfiguredDefaultSource?: ModelSelectionConfiguredDefaultSource;
   readonly disposeModelSelectionConfiguredDefaultSource?: () => void;
 }
@@ -108,6 +112,8 @@ export class ProviderRuntime {
       settingsFacade,
       ensureReady,
       dependencies.testConnectivity,
+      // /models 请求必须由 Host 的 Node fetch 发出；renderer 直接请求用户 endpoint 会被 CORS/CSP 拦截。
+      dependencies.fetchModelList ?? createProviderModelListFetcher(),
     );
     this.#modelSelectionRuntime = createModelSelectionService(
       createNodeModelSelectionFacade(this.registryService),
@@ -138,6 +144,74 @@ export class ProviderRuntime {
     this.#disposeModelSelectionConfiguredDefaultSource?.();
     this.#configRuntime.dispose();
   }
+}
+
+const FETCH_MODEL_LIST_TIMEOUT_MS = 15_000;
+
+/**
+ * 在 Host 进程发起 provider /models 请求。renderer 带自定义鉴权头直接请求用户 endpoint
+ * 会触发 preflight，而目标服务通常不返回 CORS 头，浏览器会拦掉；这里用 Node fetch 绕开该限制。
+ */
+export function createProviderModelListFetcher(): ProviderModelListTester {
+  return async (input: FetchProviderModelIdsRequest) => {
+    const response = await fetch(resolveModelsUrl(input.baseUrl), {
+      headers: resolveModelListHeaders(input),
+      signal: AbortSignal.timeout(FETCH_MODEL_LIST_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`http-${response.status}`);
+    const body: unknown = await response.json();
+    const ids = extractModelIds(body);
+    if (!ids) throw new Error("unexpected-response");
+    return ids;
+  };
+}
+
+function resolveModelsUrl(baseUrl: string): string {
+  const base = baseUrl.trim().replace(/\/+$/, "");
+  if (!base) throw new Error("empty-base-url");
+  let url: URL;
+  try {
+    url = new URL(base);
+  } catch {
+    throw new Error("invalid-base-url");
+  }
+  const path = url.pathname.replace(/\/+$/, "");
+  // baseUrl 可能已经带 /v1 或其它版本段；保留已有版本段，缺省才补 /v1，
+  // 否则会把 .../v1 改写成 .../models，或在已有版本段后叠出 /v1/v1。
+  url.pathname = /\/models$/i.test(path)
+    ? path
+    : `${/\/v\d+$/i.test(path) ? path : `${path}/v1`}/models`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function resolveModelListHeaders(input: FetchProviderModelIdsRequest): Record<string, string> {
+  if (input.apiFormat === "anthropic-messages") {
+    return {
+      "x-api-key": input.apiKey,
+      "anthropic-version": "2023-06-01",
+    };
+  }
+  return { Authorization: `Bearer ${input.apiKey}` };
+}
+
+function extractModelIds(body: unknown): string[] | null {
+  if (typeof body !== "object" || body === null) return null;
+  const data = (body as { data?: unknown }).data;
+  if (!Array.isArray(data)) return null;
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of data) {
+    const value =
+      typeof entry === "object" && entry !== null ? (entry as { id?: unknown }).id : undefined;
+    if (typeof value !== "string") continue;
+    const id = value.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
 }
 
 function createSettingsMutationTarget(
@@ -202,7 +276,7 @@ function createSettingsMutationTarget(
 }
 
 export function createProviderRuntime(options: ProviderRuntimeOptions): ProviderRuntime {
-  const { accountSource, testConnectivity, ...configRuntimeOptions } = options;
+  const { accountSource, testConnectivity, fetchModelList, ...configRuntimeOptions } = options;
   const configRuntime = createProviderConfigRuntime(configRuntimeOptions);
   const modelSelectionConfiguredDefaultSource = new NodeModelSelectionConfigRepository({
     personalRepository: configRuntime.personalRepository,
@@ -211,6 +285,7 @@ export function createProviderRuntime(options: ProviderRuntimeOptions): Provider
     configRuntime,
     accountSource,
     testConnectivity,
+    fetchModelList,
     modelSelectionConfiguredDefaultSource,
     disposeModelSelectionConfiguredDefaultSource: () =>
       modelSelectionConfiguredDefaultSource.dispose(),

@@ -247,3 +247,16 @@ export function useModelProviders(target: {
     providerSettingsView,
   };
 }
+
+/**
+ * 拉取远端模型列表。请求必须由目标 Environment 的 Host 发出；
+ * renderer 直接 fetch 用户 endpoint 会被 CORS/CSP 拦截。
+ */
+export function useFetchProviderModelIds() {
+  const { providerSettingsService } = useServices();
+  return useCallback(
+    (input: Parameters<typeof providerSettingsService.fetchProviderModelIds>[0]) =>
+      providerSettingsService.fetchProviderModelIds(input),
+    [providerSettingsService],
+  );
+}

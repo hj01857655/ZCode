@@ -24,7 +24,6 @@ import {
   ProviderCardHeader,
   ProviderConnectionSection,
   ProviderModelsSection,
-  createEmptyModel,
 } from "./ProviderCardSections.js";
 import { resolveModelProviderDisplayName } from "./constants.js";
 import { useProviderDetailFeedback } from "./ProviderDetailFeedback.js";
@@ -727,6 +726,28 @@ export function InlineEditableProviderCard({
     [onAddPersonalModel, provider.providerId, runSaveOperation],
   );
 
+  // 远端批量导入在 FetchModelsButton 内已去重；这里再按当前设置视图归一化一次，防止重复写入。
+  const handleAddModelIds = useCallback(
+    async (modelIds: string[]) => {
+      if (!onAddPersonalModel) throw new Error("当前设置入口未装配 Personal Model 添加能力");
+      const normalized = [...new Set(modelIds.map((id) => id.trim()).filter(Boolean))];
+      if (normalized.length === 0) return;
+      for (const modelId of normalized) {
+        await handleAddModel({
+          kind: "candidate",
+          modelId,
+          builtin: false,
+          personalConfig: {},
+          config: { properties: { supportsToolCall: true } },
+          hasPersonalConfig: true,
+          executable: false,
+          selectable: false,
+        });
+      }
+    },
+    [handleAddModel, onAddPersonalModel],
+  );
+
   const handleReorderModelIds = useCallback(
     (modelIds: string[]) => {
       if (!onReorderModelIds) return;
@@ -855,15 +876,7 @@ export function InlineEditableProviderCard({
                 baseUrl={baseUrlValue}
                 apiKey={apiKeyValue}
                 existingModelIds={models.map((model) => model.modelId)}
-                onAddModels={async (modelIds) => {
-                  for (const modelId of modelIds) {
-                    await handleAddModel({
-                      ...createEmptyModel(),
-                      modelId,
-                      hasPersonalConfig: true,
-                    });
-                  }
-                }}
+                onAddModels={handleAddModelIds}
               />
             ) : undefined
           }
