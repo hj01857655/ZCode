@@ -1,0 +1,8 @@
+# node-gyp / cl 的编译中间产物。
+# binding.gyp 在包根时，cl 把 .obj 落在包根、.lib/.exp 落在当前工作目录；
+# build/Release/*.node 由仓库的 **/build/Release/*.node 规则忽略。
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk

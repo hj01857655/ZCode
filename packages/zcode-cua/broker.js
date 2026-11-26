@@ -1,99 +1,106 @@
-import { randomUUID } from "node:crypto";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-// 公共 Host 通过 broker 入口复用参数契约；占位包仍拒绝真实能力调用。
+// Broker 协议面对外入口：协议常量、错误分类、管道命名、请求/响应编解码全部转发
+// vendor/official-runtime.js（ZCode 4.0.0 发行包内 `@zcode/zcode-cua` 的编译产物）。
+// 本文件只补发行包未导出的两个薄封装（单次 RPC / 健康探测）与本仓消费方仍在引用的
+// 历史名，不再维护平行实现。
 export { HELPER_GHOST_CURSOR_OVERLAY_ARG } from "./broker-helper-constants.js";
+export {
+  BROKER_SOCKET_ENV,
+  BrokerError,
+  CuaHelperError,
+  notAuthorized,
+  notSelectable,
+  notSettable,
+  elementUnavailable,
+  actionUnavailable,
+  foregroundRequired,
+  parseRequestLine,
+  okResponse,
+  errorResponse,
+  errorResponseFromException,
+  serializeResponse,
+  dispatchRequest,
+  isBrokerMethod,
+  isReadOnlyBrokerMethod,
+  mintBrokerSocketPath,
+  resolveBrokerSocketPath,
+} from "./vendor/official-runtime.js";
 
-export const BROKER_SOCKET_ENV = "ZCODE_CUA_PERMISSION_BROKER_SOCKET";
+import {
+  CuaHelperError,
+  PermissionBrokerClient,
+  dispatchRequest as officialDispatchRequest,
+  parseRequestLine as officialParseRequestLine,
+  serializeResponse as officialSerializeResponse,
+} from "./vendor/official-runtime.js";
+
+// CLI 与 bootstrap 仍以这个键告知子进程「本机没有可用 broker」；官方发行包没有
+// 对应常量，值必须与 packages/shared/runtimeEnv.ts 保持一致。
 export const BROKER_UNAVAILABLE_ENV = "ZCODE_CUA_PERMISSION_BROKER_UNAVAILABLE";
-
-export class BrokerError extends Error {
-  constructor(message, options = {}) {
-    super(message ?? "Computer Use broker is unavailable.");
-    this.name = "BrokerError";
-    this.code = options.code ?? "unavailable";
-    if (options.details !== undefined) this.details = options.details;
-  }
-}
-
-export class CuaHelperError extends Error {
-  constructor(message, options = {}) {
-    super(message ?? "Computer Use Helper is unavailable.");
-    this.name = "CuaHelperError";
-    this.code = options.code ?? "helper_unavailable";
-  }
-}
 
 export function isCuaHelperError(value) {
   return value instanceof CuaHelperError;
 }
 
-const brokerErrorFactory = (code) => (message, details) =>
-  new BrokerError(message ?? code, { code, details });
+// 官方 PermissionBrokerClient 要求显式正数超时；这里给与 Helper 服务端
+// DEFAULT_REQUEST_TIMEOUT_MS 一致的默认值，调用方仍可逐次覆盖。
+const DEFAULT_RPC_TIMEOUT_MS = 15_000;
 
-export const notAuthorized = brokerErrorFactory("not_authorized");
-export const notSelectable = brokerErrorFactory("not_selectable");
-export const notSettable = brokerErrorFactory("not_settable");
-export const elementUnavailable = brokerErrorFactory("element_unavailable");
-export const actionUnavailable = brokerErrorFactory("action_unavailable");
-export const foregroundRequired = brokerErrorFactory("foreground_required");
-
-export async function callBrokerMethod(_args) {
-  throw new BrokerError("Computer Use is not available in this build.");
+/**
+ * 单次 broker RPC。握手（authenticate 首帧）与错误分类由官方 PermissionBrokerClient
+ * 负责：抛出的 PermissionBrokerError.code 保留 Helper 的原始错误码。
+ */
+export async function callBrokerMethod(args) {
+  const client = new PermissionBrokerClient(args.socketPath, {
+    timeoutMs: args.timeoutMs ?? DEFAULT_RPC_TIMEOUT_MS,
+  });
+  return await client.call(args.method, args.params ?? {});
 }
 
-export async function probeHelperHealth(_socketPath, _options) {
-  return { bundleId: null, pid: null };
+/**
+ * Host 在 spawn 后立刻探测，Helper 可能还在 bind 管道；按 poll 重试而不是一次失败就判死。
+ * 每次探测新建客户端：官方客户端把「已经发送过」的请求状态记录在实例上，复用会污染
+ * 后续失败分类。
+ */
+export async function probeHelperHealth(socketPath, options = {}) {
+  const deadline = Date.now() + (options.timeoutMs ?? 3_000);
+  const pollIntervalMs = options.pollIntervalMs ?? 100;
+  const perTryTimeoutMs = options.perTryTimeoutMs ?? 1_000;
+  let lastError;
+  for (;;) {
+    try {
+      const info = await callBrokerMethod({
+        socketPath,
+        method: "broker_info",
+        timeoutMs: perTryTimeoutMs,
+      });
+      return {
+        bundleId: typeof info?.bundle_id === "string" ? info.bundle_id : null,
+        pid: Number.isInteger(info?.pid) ? info.pid : null,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+    if (Date.now() + pollIntervalMs >= deadline) break;
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new CuaHelperError("helper_unavailable", "Computer Use Helper health probe failed");
 }
 
-export function mintBrokerSocketPath(options = {}) {
-  const dir = typeof options.dir === "string" ? options.dir : tmpdir();
-  return join(dir, `zcode-cua-broker-${randomUUID()}.sock`);
-}
-
-export function resolveBrokerSocketPath(options = {}) {
-  const env = options.env ?? process.env;
-  const fromEnv = env[BROKER_SOCKET_ENV];
-  if (typeof fromEnv === "string" && fromEnv.trim()) return fromEnv;
-  return mintBrokerSocketPath(options);
-}
-
-export function parseRequestLine(_line) {
-  return undefined;
-}
-
-export function okResponse(result) {
-  return { ok: true, result };
-}
-
-export function errorResponse(message, options = {}) {
-  return {
-    ok: false,
-    error: { message, ...(options.code ? { code: options.code } : {}) },
-  };
-}
-
-export function errorResponseFromException(error) {
-  return errorResponse(error instanceof Error ? error.message : String(error));
-}
-
-export function serializeResponse(response) {
-  return `${JSON.stringify(response)}\n`;
-}
-
-export async function dispatchRequest(_backend, _request) {
-  throw new CuaHelperError("Computer Use is not available in this build.");
-}
-
-export async function handleRequestLine(_backend, _line) {
-  throw new CuaHelperError("Computer Use is not available in this build.");
-}
-
-export function isBrokerMethod(_method) {
-  return false;
-}
-
-export function isReadOnlyBrokerMethod(_method) {
-  return false;
+/**
+ * 官方 brokerServer 自己按行取请求；发行包未把「读一行 → 分派 → 序列化」导成函数，
+ * 这里用它的三个原语拼出本仓历史上暴露的 handleRequestLine。
+ */
+export async function handleRequestLine(backend, line) {
+  const parsed = officialParseRequestLine(line);
+  if (!parsed.ok) {
+    return officialSerializeResponse({
+      id: parsed.id,
+      ok: false,
+      error: { code: parsed.code, message: parsed.message },
+    });
+  }
+  const response = await officialDispatchRequest(backend, parsed.request);
+  return officialSerializeResponse(response);
 }

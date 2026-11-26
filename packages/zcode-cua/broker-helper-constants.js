@@ -1,6 +1,10 @@
-export const HELPER_APP_NAME = "ZCode Computer Use.app";
-export const DEV_HELPER_APP_NAME = "ZCode Computer Use Dev.app";
-export const HELPER_DISPLAY_NAME = "ZCode Computer Use";
-export const HELPER_BUNDLE_ID = "dev.zcode.cua-helper";
-export const DEV_CUA_HELPER_BUNDLE_ID = "dev.zcode.cua-helper.dev";
-export const HELPER_GHOST_CURSOR_OVERLAY_ARG = "--ghost-cursor-overlay";
+// Helper 身份常量以发行包内 @zcode/zcode-cua/dist/broker/helperConstants.js 为准：
+// 打包暂存（windows-cua-helper-assets.mjs）与设置页都按这些值匹配产物目录。
+export {
+  HELPER_APP_NAME,
+  DEV_HELPER_APP_NAME,
+  HELPER_DISPLAY_NAME,
+  HELPER_BUNDLE_ID,
+  DEV_CUA_HELPER_BUNDLE_ID,
+  HELPER_GHOST_CURSOR_OVERLAY_ARG,
+} from "./vendor/official-runtime.js";

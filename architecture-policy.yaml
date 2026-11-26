@@ -2452,6 +2452,11 @@ exceptions:
     paths:
       - packages/zcode-cua/src/**
     reason: The whole zcode-cua producer package (broker, native adapters, tools) entered the repo after the gate timestamp as pre-existing code moved from a separate repository; adopting its internal layers needs a dedicated CONTRACT pass (it has known internal cycles by design), not a mechanical split in this branch.
+  - id: zcode-cua-vendored-official-runtime
+    rule: unmanaged-new-file
+    paths:
+      - packages/zcode-cua/vendor/official-runtime.js
+    reason: 该文件是从 ZCode 发行包 node-repl-host/mcp/server.js 切出的 @generated 运行时，由 scripts/extract-official-runtime.mjs 重新生成，不是本仓手写实现；它承载 producer 的完整工具运行时与 broker 协议，模块化拆分需要单独 CONTRACT pass。只豁免这一份生成物，不为 vendor 目录或同包其它文件开放例外。
   - id: ui-more-locales-new-files
     rule: unmanaged-new-file
     paths:
@@ -2610,3 +2615,12 @@ exceptions:
     paths:
       - packages/zcode-cua/executor/**
     reason: 并行作者把 native-input / screenshot / hold-key 原语拆到独立 executor 目录，已由 packages/zcode-cua/index.js 引用；本次未改动其内容，仅登记准入，不接管 zcode-cua 的模块边界。
+  - id: cua-windows-helper-admission
+    rule: unmanaged-new-file
+    paths:
+      - packages/zcode-cua/dist/**
+      - packages/zcode-cua/build/Release/ax_native.node
+      - packages/zcode-cua/runtime-manifest.json
+      - packages/zcode-cua/native/**
+      - packages/zcode-cua/scripts/build-native.mjs
+    reason: Windows CUA producer 的官方 Helper 运行时产物（dist/windows-helper.js 与官方 ax_native.node 原件，sha256 由 runtime-manifest.json 声明）与自研 N-API 锚点与构建脚本，由 package.json.zcodeCuaRuntime 直接声明；该包整体待专门 CONTRACT 拆分，本次只补齐 runtime 产物，不接管模块边界。

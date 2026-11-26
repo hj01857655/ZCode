@@ -5,13 +5,13 @@ export declare const BROKER_UNAVAILABLE_ENV: string;
 
 export declare class BrokerError extends Error {
   code: string;
-  details?: unknown;
-  constructor(message?: string, options?: { code?: string; details?: unknown });
+  details: Record<string, unknown>;
+  constructor(code: string, message: string, details?: Record<string, unknown>);
 }
 
 export declare class CuaHelperError extends Error {
   code: string;
-  constructor(message?: string, options?: { code?: string });
+  constructor(code: string, message: string, options?: { cause?: unknown });
 }
 
 export declare function isCuaHelperError(value: unknown): value is CuaHelperError;
@@ -57,20 +57,32 @@ export declare function mintBrokerSocketPath(options?: SocketPathOptions): strin
 export declare function resolveBrokerSocketPath(options?: SocketPathOptions): string;
 
 export interface BrokerRequest {
-  id?: string | null;
+  id: number;
   method: string;
-  params?: unknown;
+  params: Record<string, unknown>;
 }
 
 export interface BrokerResponse {
+  id: number;
   ok: boolean;
-  [key: string]: unknown;
+  result?: unknown;
+  error?: { code: string; message: string; details?: Record<string, unknown> };
+  presentation?: unknown;
 }
 
-export declare function parseRequestLine(line: string): BrokerRequest | undefined;
-export declare function okResponse(result: unknown): BrokerResponse;
-export declare function errorResponse(message: string, options?: { code?: string }): BrokerResponse;
-export declare function errorResponseFromException(error: unknown): BrokerResponse;
+export type BrokerRequestParseResult =
+  | { ok: true; request: BrokerRequest }
+  | { ok: false; id: number; code: string; message: string };
+
+export declare function parseRequestLine(line: string): BrokerRequestParseResult;
+export declare function okResponse(id: number, result?: unknown, presentation?: unknown): BrokerResponse;
+export declare function errorResponse(
+  id: number,
+  code: string,
+  message: string,
+  details?: Record<string, unknown>,
+): BrokerResponse;
+export declare function errorResponseFromException(id: number, error: unknown): BrokerResponse;
 export declare function serializeResponse(response: BrokerResponse): string;
 
 export type BrokerErrorCode = string;
@@ -85,11 +97,12 @@ export interface BrokerHandler {
 export declare function dispatchRequest(
   backend: NativeAutomationBackend,
   request: BrokerRequest,
+  callId?: string,
 ): Promise<BrokerResponse>;
 export declare function handleRequestLine(
   backend: NativeAutomationBackend,
   line: string,
-): Promise<BrokerResponse>;
+): Promise<string>;
 
 export declare function isBrokerMethod(method: string): method is BrokerMethod;
 export declare function isReadOnlyBrokerMethod(method: string): boolean;

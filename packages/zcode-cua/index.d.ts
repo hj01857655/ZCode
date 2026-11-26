@@ -34,6 +34,7 @@ export interface ComputerUseRuntimeOptions {
   env?: Record<string, string | undefined>;
 }
 
+// 官方实现无条件读取 options.env，省略 options 会在第一次调用前抛 TypeError。
 export declare function createComputerUseRuntime(
-  options?: ComputerUseRuntimeOptions,
+  options: ComputerUseRuntimeOptions,
 ): ComputerUseRuntime;

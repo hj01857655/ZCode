@@ -1401,6 +1401,12 @@ MCP 动态 tool 还需要额外确认：
 - MCP server 可在 result `_meta` 中声明 namespaced 的 `zcode/errorPresentation: "message-only"`，要求通用 bridge 在 `isError: true` 时直接投影 content，不额外添加 `MCP tool returned an error:` 包装。该能力只控制模型可见文案，不得被当作失败状态本身；失败事实仍以标准 MCP `isError` 为准。`node_repl` 生产端不得声明 `message-only`：它直接把经过脱敏的结构化 `run.error.message` 写入 content，并让通用 bridge 投影稳定的 `MCP tool returned an error:` 前缀，供不读取私有 `_meta` 的分析链路区分成功与失败。错误结果不得混入错误类型、`at ...` 堆栈帧或失败前的 REPL 日志。通用 bridge 禁止按 `serverName` 分支或解析具体错误正文。本调整不修改 `ToolResultPayload`、session event、持久化、UI 或 desktop continuous / web remote replayable 链路。开发态 desktop agent 构建必须同步重建 `@zcode/browser-use-plugin` runtime，确保插件缓存 hash 能感知这类生产端变更。
 - 标准 media result 不应无条件降级成文本占位。`image` block 应进入 provider-neutral `ModelMessageContent`，让 screenshot/visual inspection 类 MCP 能力和内置 `Read` 图片路径一致；不支持的 media 再返回短占位并受 result budget 约束。
 - 官方 CUA 的最终 raster 是坐标输入的一部分，不是普通可优化媒体。只有通过 Host authority 校验的官方 `zcode-cua` descriptor 可以启用该路径；每个 image 必须紧邻精确形态的 `image_ref {frame_id,width,height,actionable}`，bridge 必须校验 canonical base64、PNG/JPEG 文件头、MIME、实际尺寸、200 KiB 上限和单结果 `frame_id` 唯一性，并保持 bytes 与 block 顺序不变。`PostToolUse` hook 文本是这批 tool result 之后的附件，不进受保护的结果，不能替换或重排媒体对。任一校验失败时必须原子移除本次结果中的全部 CUA image/image_ref 并返回错误，禁止只留引用、只留图片或退回 artifact/文本占位。第三方同名 MCP 仍走通用 result budget，不能获得豁免。
+  producer（`@zcode/zcode-cua`）在发帧时就按同一约束自检：窗口截图超过 200 KiB base64 时按
+  2/4/8 整数倍盒式降采样重编码，`image_ref` 与 integrity 报降采样后的栅格尺寸，帧记录
+  额外保存屏幕原点与 `scale`，坐标动作把模型给的栅格像素按 `round(x*scale)` 还原到窗口
+  像素；`preserveOfficialCuaFrameResult` 与最终 attestation 再校验 canonical base64、
+  PNG/JPEG 文件头实际尺寸、MIME、预算和单结果 `frame_id` 唯一性，任一不成立即原子移除
+  整对 image/image_ref。
 - official CUA 结构化结果在 Host 内只由 `modelContentProtection=official_cua_frame_v1` 表示；不要再增加或恢复并行 preserve boolean。`returnedBytes` 是文本与真实媒体载荷的唯一 aggregate，hook 文本不进 tool result，不计入它；不能依赖第二份 `mediaBytes` 镜像状态。
 - shared `node_repl` 内的 CUA SDK 不得把 producer 的 legacy MCP 文本 envelope 原样再提交给模型。成功的纯文本 action/metadata 结果只在 Worker 中归一化为 SDK 字段；若还需向 Host 传递 app-display `_meta` 或 action-state，structured sink 必须使用空 `content` 的 sideband projection。只有错误或受保护的 image/`image_ref` 结果可以携带模型可见 `content`。这样同一 cell 末尾的 `nodeRepl.write(state.text)` 是唯一 AX 文本来源，不会与动作回执或 `content`/`text`/`message` 镜像叠加。
 - official CUA plugin-host 恢复 broker token 前只校验真实权威事实：bundled official plugin id、已捕获的 authority/token 和与捕获值完全相等的 socket。`--permission-mode product` / `--backend broker` 从未参与 producer 运行时决策，不得再注入或当作安全凭据；注入 canonical socket 时必须清掉 `--` terminator 之前的旧标签，混版本配置不能继续把伪安全状态传给 producer。任一真实凭据缺失或漂移仍必须在 import 前 fail closed。

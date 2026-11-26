@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "packageName": "@zcode/zcode-cua",
+  "packageVersion": "0.6.6",
+  "platform": "win32",
+  "arch": "x64",
+  "electronVersion": "44.7.0",
+  "entry": "dist/windows-helper.js",
+  "addon": "build/Release/ax_native.node",
+  "sha256": {
+    "entry": "4e7577a0dabd86341ffd6e0e672719c0d8cb994388bc368796252d6d2d8ceff3",
+    "addon": "ad498f44931f183c6a72df61d56a56db1c2619cec44dac605ebc52d63c46126c"
+  }
+}
