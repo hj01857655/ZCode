@@ -119,4 +119,15 @@ ZCODE_SKIP_PREPARE=1 ZCODE_SKIP_BUILD=1 pnpm bundle:desktop
   的子集。原因是校验只判断模块在不在 app.asar 里，真正把依赖闭包补进产物的是 afterPack 注入；
   只加校验不加注入时，没有任何环节负责补齐该模块的子依赖，只能等打包末尾失败。
   注入名单按 `package.json` 依赖闭包递归展开，已在产物里的模块会被跳过，重复登记不会改变产物。
+- `packages/desktop/scripts/app-asar-repack.mjs` 的候选 asar 替换必须同步完成，再返回给调用的
+  afterPack 钩子。原因是 Windows 扫描器持有句柄时 `renameSync` 会抛 EPERM，只能覆盖写入目标
+  `app.asar`；若覆盖写入用异步 stream 却在同步重试器里调用，Promise 未等待就进入 `finally`
+  删除 `.next` 候选，同时目标被异步截断，后续断言读 asar 头会报 `Unable to read header`。
+  覆盖写入必须是同步文件复制，且候选文件只在替换彻底结束后清理。
+- `packages/desktop/electron-builder.config.js` 的 `files` 必须排除 `node_modules/@arms/**`。
+  原因是 26.17 的 pnpm 收集器用 `pnpm list --prod` 取生产图，而 `pnpm list` 读的是安装态快照
+  `node_modules/.pnpm/lock.yaml`，不是 `package.json`。从 `package.json` 删掉依赖后若不重新
+  `pnpm install`，快照仍把它报成生产依赖；本仓库是 `node-linker=hoisted`，收集器向上搜索会在
+  仓库根 `node_modules` 命中已不在 lockfile 的孤儿目录，把已移除的 `@arms/rum-*` 采集器代码
+  收进 app.asar。该排除规则是安装态过期时的兜底；根治手段是删依赖后重新 `pnpm install`。
 - 开发态仍保留 tsup sourcemap，方便本地调试 main/host/preload；生产态不生成也不暴露 sourcemap。

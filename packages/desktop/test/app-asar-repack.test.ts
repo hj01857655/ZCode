@@ -72,4 +72,48 @@ describe("app asar repack", () => {
       rmSync(rootDir, { force: true, recursive: true });
     }
   });
+
+  it("rename 被锁时覆盖写入必须同步完成，不能出现半截 asar", async () => {
+    const rootDir = mkdtempSync(resolve(tmpdir(), ".zcode-asar-lock-test-"));
+    try {
+      const sourceDir = resolve(rootDir, "source");
+      mkdirSync(resolve(sourceDir, "node_modules/node-pty/prebuilds/darwin-arm64"), {
+        recursive: true,
+      });
+      writeFileSync(resolve(sourceDir, "payload.txt"), "repacked-payload");
+      writeFileSync(
+        resolve(sourceDir, "node_modules/node-pty/prebuilds/darwin-arm64/pty.node"),
+        "native",
+      );
+
+      const appAsarPath = resolve(rootDir, "app.asar");
+      writeFileSync(appAsarPath, "old-payload");
+
+      const lockedRename = () => {
+        const error = new Error("EPERM: operation not permitted");
+        (error as NodeJS.ErrnoException).code = "EPERM";
+        throw error;
+      };
+
+      await replaceAppAsarFromStaging({
+        sourceDir,
+        appAsarPath,
+        targetPlatformKey: "darwin-arm64",
+        runAsarCommand: (args: string[]) => {
+          execFileSync(process.execPath, [asarCliPath, ...args]);
+        },
+        renameAppAsar: lockedRename,
+        retryOptions: { retryCount: 1, retryDelayMs: 0 },
+      });
+
+      // 覆盖写入返回时目标必须已完整写入；不能是异步 pipeline 尚未兑现的半截文件。
+      const header = getRawHeader(appAsarPath).header as {
+        files: Record<string, unknown>;
+      };
+      expect(header.files).toHaveProperty("payload.txt");
+      expect(existsSync(`${appAsarPath}.next`)).toBe(false);
+    } finally {
+      rmSync(rootDir, { force: true, recursive: true });
+    }
+  });
 });

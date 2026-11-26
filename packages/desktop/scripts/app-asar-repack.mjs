@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { createReadStream, createWriteStream, rmSync, renameSync, statSync } from "node:fs";
-import { pipeline } from "node:stream/promises";
+import { copyFileSync, rmSync, renameSync, statSync } from "node:fs";
 import { access, rm } from "node:fs/promises";
 
 export const ASAR_UNPACK_NATIVE_GLOB = "*.{node,dll,dylib,exe}";
@@ -10,7 +9,11 @@ const ASAR_REPLACE_RETRY_DELAY_MS = 1_000;
 
 // Windows 上扫描器（Defender / 第三方 AV / Everything）可能在 asar 解包、打包完成后短暂持有
 // 文件句柄，让 fs.rm 抛 EBUSY。对同一路径做有限次退避重试即可释放，不能因为瞬时锁把整轮打包判死。
-function retryOnWindowsFileLock(operation, pathLabel) {
+function retryOnWindowsFileLock(
+  operation,
+  pathLabel,
+  { retryCount = ASAR_REPLACE_RETRY_COUNT, retryDelayMs = ASAR_REPLACE_RETRY_DELAY_MS } = {},
+) {
   for (let attempt = 1; ; attempt += 1) {
     try {
       operation();
@@ -21,13 +24,13 @@ function retryOnWindowsFileLock(operation, pathLabel) {
         (error.code === "EBUSY" ||
           error.code === "EPERM" ||
           /EBUSY|EPERM|resource busy or locked|permission denied/i.test(String(error.message)));
-      if (!locked || attempt >= ASAR_REPLACE_RETRY_COUNT) {
+      if (!locked || attempt >= retryCount) {
         throw error;
       }
       console.log(
-        `[asar-repack] ${pathLabel} locked, retry ${attempt}/${ASAR_REPLACE_RETRY_COUNT} after ${ASAR_REPLACE_RETRY_DELAY_MS}ms`,
+        `[asar-repack] ${pathLabel} locked, retry ${attempt}/${retryCount} after ${retryDelayMs}ms`,
       );
-      spawnSync(process.execPath, ["-e", `setTimeout(()=>{},${ASAR_REPLACE_RETRY_DELAY_MS})`], {
+      spawnSync(process.execPath, ["-e", `setTimeout(()=>{},${retryDelayMs})`], {
         stdio: "ignore",
       });
     }
@@ -45,16 +48,28 @@ async function pathExists(path) {
 
 // Windows 文件允许被读写共享打开但不能删除/改名（句柄未开 FILE_SHARE_DELETE）。
 // 覆盖写入不会改变目录项，绕开这类锁；必须在候选文件完整生成后调用。
-async function overwriteFileContents(sourcePath, destinationPath) {
-  await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath));
+// 必须是同步复制：retryOnWindowsFileLock 是同步重试器，若这里返回 Promise，
+// 调用方在 Promise 兑现前就进入 finally 删除候选文件，目标文件也会被异步流截断。
+function overwriteFileContents(sourcePath, destinationPath) {
+  copyFileSync(sourcePath, destinationPath);
   if (statSync(sourcePath).size !== statSync(destinationPath).size) {
     throw new Error(`覆盖写入后大小不一致: ${sourcePath} -> ${destinationPath}`);
   }
 }
 
-function replaceFileFromCandidate({ sourcePath, destinationPath, label }) {
+function replaceFileFromCandidate({
+  sourcePath,
+  destinationPath,
+  label,
+  rename = renameSync,
+  retryOptions,
+}) {
   try {
-    retryOnWindowsFileLock(() => renameSync(sourcePath, destinationPath), `${label} rename`);
+    retryOnWindowsFileLock(
+      () => rename(sourcePath, destinationPath),
+      `${label} rename`,
+      retryOptions,
+    );
     return;
   } catch (error) {
     const locked =
@@ -68,6 +83,7 @@ function replaceFileFromCandidate({ sourcePath, destinationPath, label }) {
   retryOnWindowsFileLock(
     () => overwriteFileContents(sourcePath, destinationPath),
     `${label} overwrite`,
+    retryOptions,
   );
 }
 
@@ -88,6 +104,8 @@ export async function replaceAppAsarFromStaging({
   appAsarPath,
   targetPlatformKey,
   runAsarCommand,
+  renameAppAsar = renameSync,
+  retryOptions,
 }) {
   const candidateAsarPath = `${appAsarPath}.next`;
   const candidateUnpackedPath = `${candidateAsarPath}.unpacked`;
@@ -115,7 +133,10 @@ export async function replaceAppAsarFromStaging({
 
     // 先完整生成候选文件，再替换旧 archive 和 sidecar；不会把上一次打包的跨平台 native 留在 unpacked。
     // Windows 扫描器可能持有句柄导致删除/改名 EPERM；先退避重试，仍失败时 app.asar 走覆盖写入。
-    retryOnWindowsFileLock(() => rmSync(unpackedPath, { force: true, recursive: true }), "app.asar.unpacked");
+    retryOnWindowsFileLock(
+      () => rmSync(unpackedPath, { force: true, recursive: true }),
+      "app.asar.unpacked",
+    );
     retryOnWindowsFileLock(
       () => renameSync(candidateUnpackedPath, unpackedPath),
       "app.asar.unpacked rename",
@@ -124,6 +145,8 @@ export async function replaceAppAsarFromStaging({
       sourcePath: candidateAsarPath,
       destinationPath: appAsarPath,
       label: "app.asar",
+      rename: renameAppAsar,
+      retryOptions,
     });
   } finally {
     await Promise.all([
