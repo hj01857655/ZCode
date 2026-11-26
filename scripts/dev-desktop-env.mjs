@@ -16,12 +16,18 @@ if (requestedEnv !== "test" && requestedEnv !== "production") {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-// Computer Use Helper 只由真实 producer 提供；开源占位包下不构建 Helper、不注入 Helper 环境。
+// Computer Use Helper 安装包只由真实 producer 提供；开源占位包下不构建 Helper 安装包。
 // 见 docs/desktop/computer-use-producer-detection.md。
 const hasComputerUseProducer = isRealComputerUseProducerInstalled({
   desktopPackageRoot: join(repoRoot, "packages", "desktop"),
 });
-const computerUseDevEnv = hasComputerUseProducer ? await resolveComputerUseDevEnv() : {};
+// 占位标记只门控打包资产，不门控 dev runtime：Windows dev 直接绑定本 checkout 的
+// packages/zcode-cua（manifest 已声明 zcodeCuaRuntime），helper 由该目录的 entry 承担，
+// 不需要 dist-cua-helper 安装包。缺这条注入时 host 会落到 resources/tools/cua-helper，
+// dev 下必然 invalid-runtime-manifest。
+const computerUseDevEnv = hasComputerUseProducer
+  ? await resolveComputerUseDevEnv()
+  : resolveDevDesktopWindowsCuaEnv({ platform: process.platform, repoRoot, env: process.env });
 
 async function resolveComputerUseDevEnv() {
   const { DEV_HELPER_APP_NAME } = await import("@zcode/zcode-cua/broker/helperConstants");
