@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import type { ProviderSettingsFormProvider } from "@/lib/providerSettingsFormTypes.js";
 import type { ModelConnectivityResult } from "@zcode/shared";
-import type { ProviderSettingsView } from "@zcode/services";
+import type { FetchProviderModelIdsRequest, ProviderSettingsView } from "@zcode/services";
 import { useServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 import { useProviderSettingsServiceView } from "@/hooks/useProviderSettingsView.js";
@@ -252,10 +252,12 @@ export function useModelProviders(target: {
  * 拉取远端模型列表。请求必须由目标 Environment 的 Host 发出；
  * renderer 直接 fetch 用户 endpoint 会被 CORS/CSP 拦截。
  */
-export function useFetchProviderModelIds() {
+export function useFetchProviderModelIds(): (
+  input: FetchProviderModelIdsRequest,
+) => Promise<readonly string[]> {
   const { providerSettingsService } = useServices();
   return useCallback(
-    (input: Parameters<typeof providerSettingsService.fetchProviderModelIds>[0]) =>
+    (input: FetchProviderModelIdsRequest) =>
       providerSettingsService.fetchProviderModelIds(input),
     [providerSettingsService],
   );

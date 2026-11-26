@@ -131,6 +131,9 @@ const updateReadyCallbacks = new Set<(version: string) => void>();
 const updateStateCallbacks = new Set<(payload: UpdateStatePayload) => void>();
 const postUpdateReleaseNotesCallbacks = new Set<(payload: PostUpdateReleaseNotesPayload) => void>();
 const openWorkspacePathCallbacks = new Set<(path: string) => void>();
+// 多个 Settings 面板会同时订阅 settings-changed；每个订阅各挂一个 ipcRenderer 监听会撞到
+// Node 默认 10 个 listener 上限。preload 只挂一条主进程事件，再在本地分发给所有订阅者。
+const settingsChangedCallbacks = new Set<() => void>();
 let latestReadyUpdateVersion: string | null = null;
 let latestUpdateState: UpdateStatePayload | null = null;
 let latestPostUpdateReleaseNotes: PostUpdateReleaseNotesPayload | null = null;
@@ -210,6 +213,12 @@ ipcRenderer.on(
     }
   },
 );
+
+ipcRenderer.on(PlatformChannels.SettingsChanged, () => {
+  for (const callback of settingsChangedCallbacks) {
+    callback();
+  }
+});
 
 ipcRenderer.on(PlatformChannels.OpenWorkspacePath, (_event: unknown, path: string) => {
   if (openWorkspacePathCallbacks.size === 0) {
@@ -906,9 +915,8 @@ contextBridge.exposeInMainWorld("zcode", {
     ipcRenderer.invoke(PlatformChannels.GetZCodeStdioTapDevState),
   /** 注册 main 进程修改 settings 后的通知，返回 disposer */
   onSettingsChanged: (callback: () => void): (() => void) => {
-    const handler = () => callback();
-    ipcRenderer.on(PlatformChannels.SettingsChanged, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.SettingsChanged, handler);
+    settingsChangedCallbacks.add(callback);
+    return () => settingsChangedCallbacks.delete(callback);
   },
   /** 注册应用语言变化，返回 disposer */
   onApplicationLocaleChanged: (callback: (locale: Locale) => void): (() => void) => {

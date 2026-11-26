@@ -121,7 +121,10 @@ export function FetchModelsButton({
         {intl.formatMessage({ id: "settings.modelProvider.fetchModels" })}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[70vh] max-w-md overflow-hidden">
+        <DialogContent
+          className="max-h-[70vh] max-w-md overflow-hidden"
+          aria-describedby={undefined}
+        >
           <DialogTitle>
             {intl.formatMessage({ id: "settings.modelProvider.fetchModels.title" })}
           </DialogTitle>
