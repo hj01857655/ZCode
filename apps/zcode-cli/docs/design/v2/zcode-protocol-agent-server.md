@@ -79,7 +79,16 @@ stateDiagram-v2
   uncaughtException/unhandledRejection 只诊断一次，随后取消运行、清理并以非零码退出。
 - server 先拒绝新请求、取消反向请求和操作，再关闭所有已创建的 app，最后释放 gateway。
   迟到的 app 创建也必须关闭。此路径不调用产品 session/close，不发 session.removed，不删持久会话。
-  bootstrap 在同一剩余预算内关闭 sampler、MCP/broker、共享存储、Registry 和遥测；单项失败不能阻止其他项被尝试。
+  bootstrap 在同一剩余预算内关闭 sampler、MCP/broker、共享存储和 Registry；单项失败不能阻止其他项被尝试。
+  遥测已整体移除，关闭路径不再包含遥测步骤，也不存在需要跨 app 保活的进程级遥测句柄。
+- 遥测环境变量的归属点是 `@zcode/shared/runtime-env` 的 env 净化，不在本入口另设清单：整个 `OTEL_` 命名空间、
+  `ZCODE_ARMS_RUM_ENDPOINT` 与 `ZCODE_TELEMETRY_` 下的具名上报键（`REPORT_ENDPOINT`、`ACCOUNT_ID`、
+  `DEVICE_MID`、`*_USER_*`、`IDENTITY_STATE`、`RUNTIME_SURFACE`、`RUNTIME_DISTRIBUTION`）都在 CLI 入口
+  （`prepareCliRuntimeEnv`）退出进程环境，且不得经 tool-env-passthrough 进入 Bash/MCP 子进程。
+  `ZCODE_TELEMETRY_` 不按前缀整体剔除：同前缀的 `PARITY_*` 是 E2E 差分开关，不是上报通道，予以保留。
+  父进程或系统环境注入上述具名键时，它们不得进入 Provider Registry 或 App。
+  `ZCODE_TELEMETRY_RUNTIME_SURFACE` 同属遥测（事件归属面），一并退出；
+  入口不再解析运行面。该净化在进入协议 agent 之前同步完成，不产生关闭钩子。
 - Host 立即使旧协议失效，但 stderr 保持收集至流关闭或有界 drain；exit 报告在 drain 后
   绑定原 runtime 身份与首次原因。正常 EOF 宽限 1800ms，进程树强杀仍受原总预算约束。
   CLI 的 E2E coverage 可额外预留 500ms 写盘，Host 沿用 coverage EOF 窗口。

@@ -43,7 +43,7 @@ import type { PrepareUserExecutionBoundary, ZCodeAppOptions } from "./types.js";
 import { createWorkflowMethods, type WorkflowFacade } from "./workflow-methods.js";
 
 interface CreateWorkflowFacadeDeps {
-  agentTelemetry: AgentExecutionTelemetryPort;
+  agentTelemetry?: AgentExecutionTelemetryPort;
   appOptions: ZCodeAppOptions;
   appVersion: string;
   artifactStore?: ToolArtifactStorePort;
@@ -298,8 +298,13 @@ async function createWorkflowChildRuntime(
       workingDirectory: deps.workingDirectory,
     },
     {
-      agentTelemetry: deps.agentTelemetry,
-      agentTelemetryCausation: deps.agentTelemetry.captureCausation(),
+      // 遥测移除后装配点不再提供 port；有 port 时才带因果，避免用 undefined 覆盖 core 的默认链接行为。
+      ...(deps.agentTelemetry
+        ? {
+            agentTelemetry: deps.agentTelemetry,
+            agentTelemetryCausation: deps.agentTelemetry.captureCausation(),
+          }
+        : {}),
       // Workflow 在父工具返回后独立调度，不能伪装成父 Span 的同步 Child。
       agentTelemetryCausationMode: "linked_root",
       eventStore: createInMemorySessionEventStore(),

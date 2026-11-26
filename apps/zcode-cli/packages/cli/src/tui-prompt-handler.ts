@@ -70,7 +70,7 @@ export function createTuiSubmitPrompt(
 ): TuiPromptHandler {
   let app: Awaited<ReturnType<NonNullable<RunDependencies["createZCodeApp"]>>> | undefined;
   let activeUiLocale = uiLocale;
-  // 进程级句柄（telemetry / Provider Registry / endpoint 路由）跨 App 替换复用，见 runtime 文件。
+  // 进程级句柄（Provider Registry / endpoint 路由）跨 App 替换复用，见 runtime 文件。
   const processRuntime = createTuiProcessRuntimeState();
   let closeHandlerPromise: Promise<void> | undefined;
   const closePromises = new WeakMap<object, Promise<void>>();
@@ -145,9 +145,9 @@ export function createTuiSubmitPrompt(
   const createApp = async (request: CliResumeRequest) => {
     if (closeHandlerPromise) throw new Error("TUI prompt handler is closed");
     const {
-      appEnv,
       configuredDefaultModelSelection,
       createAppFactory,
+      env,
       providerRegistryRuntime,
       sessionId,
       workingDirectory,
@@ -165,7 +165,7 @@ export function createTuiSubmitPrompt(
         // TUI 交互入口：首个请求不等全部 MCP server；prompt 命令等其他入口保持默认 blocking。
         mcpStartupPolicy: "background",
         browserControlPort: browserRuntime?.browserControlPort,
-        env: appEnv,
+        env,
         projectConfigPath: deps.projectConfigPath,
         ...(providerEndpointRoutingPort ? { providerEndpointRoutingPort } : {}),
         providerRegistry: providerRegistryRuntime.runtime.registryService,
@@ -392,12 +392,6 @@ export function createTuiSubmitPrompt(
   submitPrompt.close = async () => {
     closeHandlerPromise ??= (async () => {
       await closeApp();
-      // Bug 根因：TUI 的 Session 切换和进程退出共用了 App close，不能在 /new 等路径
-      // 提前关闭共享 Owner；只有整个 Prompt Handler 终态才做对称 shutdown。
-      await runCliCleanupWithTimeout(
-        async () => processRuntime.shutdownTelemetry?.(),
-        cleanupTimeoutMs,
-      );
       const providerRegistryRuntime = await processRuntime.providerRegistryRuntimePromise;
       providerRegistryRuntime?.dispose();
     })();

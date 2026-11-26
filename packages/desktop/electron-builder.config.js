@@ -284,6 +284,10 @@ const PACKAGING_PRUNE_PATTERNS = [
   "!node_modules/node-addon-api/**",
   "!node_modules/cpu-features/**",
   "!node_modules/nan/**",
+  // 遥测拔除后的兜底：收集器用 `pnpm list --prod` 取生产图，它读安装态快照
+  // node_modules/.pnpm/lock.yaml 而非 package.json；删依赖后未重新 pnpm install 时，
+  // hoisted 布局下向上搜索会命中仓库根 node_modules 里已不在 lockfile 的 @arms/rum-*。
+  "!node_modules/@arms/**",
 ];
 
 function buildDesktopArtifactName(platformName, extension = "${ext}") {

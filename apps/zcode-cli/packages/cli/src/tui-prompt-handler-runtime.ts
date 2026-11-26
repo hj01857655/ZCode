@@ -18,13 +18,11 @@ type ProviderRegistryRuntime = Awaited<
 interface TuiProcessRuntimeState {
   providerEndpointRoutingPort: ZCodeAppOptions["providerEndpointRoutingPort"];
   providerRegistryRuntimePromise: Promise<ProviderRegistryRuntime> | undefined;
-  shutdownTelemetry: (() => Promise<void>) | undefined;
 }
 
 export const createTuiProcessRuntimeState = (): TuiProcessRuntimeState => ({
   providerEndpointRoutingPort: undefined,
   providerRegistryRuntimePromise: undefined,
-  shutdownTelemetry: undefined,
 });
 
 // 返回值类型交给推断：原地 createApp 里这几个都是推断出来的局部变量，手写接口反而会把
@@ -52,18 +50,6 @@ export async function prepareTuiAppRuntime(
   const bootstrapModule = deps.createZCodeApp ? undefined : await loadBootstrapModule();
   const createAppFactory = deps.createZCodeApp ?? bootstrapModule?.createZCodeApp;
   if (!createAppFactory) throw new Error("ZCode app factory is unavailable.");
-  const prepareTelemetry =
-    deps.prepareZCodeTelemetryEnv ?? bootstrapModule?.prepareZCodeTelemetryEnv;
-  if (prepareTelemetry) {
-    state.shutdownTelemetry =
-      deps.shutdownZCodeTelemetry ?? bootstrapModule?.shutdownZCodeTelemetry;
-  }
-  const appEnv = prepareTelemetry
-    ? await prepareTelemetry(env, {
-        cliVersion: version,
-        productVersion: env.ZCODE_APP_VERSION,
-      })
-    : env;
   const startProviderRegistryRuntime =
     deps.startProcessProviderRegistryRuntime ??
     bootstrapModule?.startProcessProviderRegistryRuntime;
@@ -71,7 +57,7 @@ export async function prepareTuiAppRuntime(
     throw new Error("Provider Registry runtime is unavailable.");
   }
   state.providerRegistryRuntimePromise ??= startProviderRegistryRuntime(
-    appEnv,
+    env,
     deps.skipUserConfig
       ? {}
       : {
@@ -98,9 +84,10 @@ export async function prepareTuiAppRuntime(
   });
 
   return {
-    appEnv,
     configuredDefaultModelSelection,
     createAppFactory,
+    // dotenv 与运行时净化都写进这同一个 env 对象；App 必须拿同一个引用才能看到运行时后写入的键。
+    env,
     providerRegistryRuntime,
     sessionId,
     workingDirectory,

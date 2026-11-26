@@ -222,8 +222,7 @@ export async function runZCodeProtocolAgent(
       module: "bootstrap.zcode_protocol",
       providerCount: providerRegistryRuntime.snapshot.registry.providers.length,
     });
-    const runtimeSurface = resolveProtocolRuntimeSurface(runtimeEnv);
-    const telemetryEnv = runtimeEnv;
+    // 遥测移除后运行面不再有读取方；ZCODE_TELEMETRY_RUNTIME_SURFACE 随 CLI 入口的 env 净化一并退出。
     mcpTelemetryTracker =
       configResult.config.features.mcp === false
         ? undefined
@@ -368,7 +367,7 @@ export async function runZCodeProtocolAgent(
             };
           },
           env: {
-            ...telemetryEnv,
+            ...runtimeEnv,
             ...appOptions.env,
           },
           ...(nodeReplBrowserBroker ? { nodeReplBrowserBroker } : {}),
@@ -512,15 +511,6 @@ export async function runZCodeProtocolAgent(
       status: "completed",
     });
   }
-}
-
-function resolveProtocolRuntimeSurface(
-  env: NodeJS.ProcessEnv,
-): "desktop_local_host" | "remote_workspace_host" {
-  // Bug 根因：入口曾无条件覆盖 Host 注入值，远程 SSH/WSL/容器 Trace 被归入本地 Desktop。
-  return env.ZCODE_TELEMETRY_RUNTIME_SURFACE?.trim() === "remote_workspace_host"
-    ? "remote_workspace_host"
-    : "desktop_local_host";
 }
 
 /** 内置 CLI 的凭据加解密只委托已连接 Host，禁止失败后改为本机系统库读取。 */

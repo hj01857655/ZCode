@@ -258,4 +258,7 @@ it("files 规则裁剪已核实为构建期的依赖，且保留 @babel/runtime"
   expect(files.indexOf("node_modules/@babel/runtime/**")).toBeGreaterThan(
     files.indexOf("!node_modules/@babel/**"),
   );
+  // 遥测拔除后的兜底：pnpm list 读安装态快照而非 package.json，安装态过期时
+  // 收集器会把仓库根的 @arms/rum-* 孤儿目录收进 app.asar。
+  expect(files).toContain("!node_modules/@arms/**");
 });

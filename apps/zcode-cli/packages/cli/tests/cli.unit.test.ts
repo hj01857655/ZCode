@@ -210,6 +210,36 @@ test("prepares a sanitized CLI runtime env with ZCode-owned runtime keys", () =>
   assert.equal(sourceEnv.NODE_ENV, "development");
 });
 
+test("strips host-injected telemetry env that the CLI no longer consumes", () => {
+  // 遥测已整体移除；宿主仍可能注入旧上报端点、数仓端点与 OTel SDK 约定键。
+  // 它们必须同时退出 App 环境与 Bash/MCP 子进程环境，否则会借 shell 快照污染子进程。
+  const telemetryEnvKeys = [
+    "ZCODE_TELEMETRY_REPORT_ENDPOINT",
+    "ZCODE_TELEMETRY_ACCOUNT_ID",
+    "ZCODE_ARMS_RUM_ENDPOINT",
+    "OTEL_LOG_LEVEL",
+    "OTEL_SDK_DISABLED",
+    "OTEL_EXPORTER_OTLP_TIMEOUT",
+    "OTEL_EXPORTER_OTLP_PROTOCOL",
+    "OTEL_TRACES_EXPORTER",
+    "OTEL_METRICS_EXPORTER",
+    "OTEL_PROPAGATORS",
+  ];
+
+  const env = prepareCliRuntimeEnv(
+    {
+      ...Object.fromEntries(telemetryEnvKeys.map((key) => [key, "probe"])),
+      ZCODE_API_KEY: "kept",
+    },
+    ["/usr/bin/node", "/workspace/bin/zcode.js"],
+  );
+
+  for (const key of telemetryEnvKeys) assert.equal(env[key], undefined, key);
+  const toolEnv = readZCodeToolEnvPassthroughEnv(env);
+  for (const key of telemetryEnvKeys) assert.equal(toolEnv[key], undefined, key);
+  assert.equal(env.ZCODE_API_KEY, "kept");
+});
+
 test("prepares beta CLI runtime env with beta storage root", () => {
   const env = prepareCliRuntimeEnv(
     {
@@ -2490,36 +2520,6 @@ test("wires TUI new command into a fresh active app", async () => {
   assert.deepEqual(closedSessionIds, ["sess_new_0", "sess_new_1"]);
 });
 
-test("keeps shared telemetry alive across TUI session replacement and shuts it down once", async () => {
-  const ctx = createContext(["tui"]);
-  let telemetryPrepareCount = 0;
-  let telemetryShutdownCount = 0;
-  const exitCode = await run(ctx, {
-    ...createPromptDeps(),
-    prepareZCodeTelemetryEnv: async (env) => {
-      telemetryPrepareCount += 1;
-      return env;
-    },
-    shutdownZCodeTelemetry: async () => {
-      telemetryShutdownCount += 1;
-    },
-    runTui: async (options) => {
-      await options.submitPrompt("hello first", {
-        abortSignal: new AbortController().signal,
-      });
-      await options.submitPrompt("/new", {
-        abortSignal: new AbortController().signal,
-      });
-      assert.equal(telemetryShutdownCount, 0);
-      return 0;
-    },
-  });
-
-  assert.equal(exitCode, 0);
-  assert.equal(telemetryPrepareCount, 2);
-  assert.equal(telemetryShutdownCount, 1);
-});
-
 test("reuses provider endpoint routing when TUI replaces its active session", async () => {
   const ctx = createContext(["tui"]);
   const providerEndpointRoutingPort = {
@@ -2573,14 +2573,9 @@ test("closes the active TUI app on process shutdown signals", async () => {
   const shutdownProcess = createTestShutdownProcess("darwin");
   const exitDeferred = createDeferred<number>();
   let closeCount = 0;
-  let telemetryShutdownCount = 0;
 
   const exitCode = await run(ctx, {
     ...createPromptDeps(),
-    prepareZCodeTelemetryEnv: async (env) => env,
-    shutdownZCodeTelemetry: async () => {
-      telemetryShutdownCount += 1;
-    },
     createZCodeApp: () =>
       ({
         close: async () => {
@@ -2615,7 +2610,6 @@ test("closes the active TUI app on process shutdown signals", async () => {
 
   assert.equal(exitCode, 0);
   assert.equal(closeCount, 1);
-  assert.equal(telemetryShutdownCount, 1);
 });
 
 test("parses built-in slash commands outside the TUI", () => {
@@ -5209,37 +5203,26 @@ test("closes the app after a headless prompt", async () => {
   assert.equal(ctx.stdout.output(), "hello\n");
 });
 
-test("shuts down prepared telemetry after a headless prompt", async () => {
-  const ctx = createContext(["--prompt", "hello telemetry"]);
-  let telemetryShutdownCount = 0;
-  const exitCode = await run(ctx, {
-    ...createPromptDeps(),
-    prepareZCodeTelemetryEnv: async (env) => env,
-    shutdownZCodeTelemetry: async () => {
-      telemetryShutdownCount += 1;
-    },
-  });
-
-  assert.equal(exitCode, 0);
-  assert.equal(telemetryShutdownCount, 1);
-});
-
-test("shuts down prepared telemetry when headless app creation fails", async () => {
-  const ctx = createContext(["--prompt", "failing telemetry"]);
-  let telemetryShutdownCount = 0;
+test("disposes the provider registry when headless app creation fails", async () => {
+  // App 创建失败时进程级句柄已经启动；closeApp 必须无条件释放它，否则 Registry 常驻到进程退出。
+  const ctx = createContext(["--prompt", "failing app creation"]);
+  let registryDisposeCount = 0;
   const exitCode = await run(ctx, {
     ...createPromptDeps(),
     createZCodeApp: () => {
       throw new Error("app creation failed");
     },
-    prepareZCodeTelemetryEnv: async (env) => env,
-    shutdownZCodeTelemetry: async () => {
-      telemetryShutdownCount += 1;
-    },
+    startProcessProviderRegistryRuntime: async () =>
+      ({
+        dispose: () => {
+          registryDisposeCount += 1;
+        },
+        runtime: { registryService: {} },
+      }) as never,
   });
 
   assert.equal(exitCode, 1);
-  assert.equal(telemetryShutdownCount, 1);
+  assert.equal(registryDisposeCount, 1);
 });
 
 test("aborts and closes the headless app on process shutdown signals", async () => {
