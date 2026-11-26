@@ -10,7 +10,11 @@
   "scripts": {
     "build": "node scripts/check-sdk.mjs",
     "clean": "node ../../scripts/clean-dist.mjs",
+    "sync:skill": "node scripts/sync-skill.mjs",
     "sync:cache": "node scripts/sync-cache.mjs",
+    "version:check": "node scripts/check-version-coherence.mjs --check",
+    "sync:version": "node scripts/check-version-coherence.mjs",
+    "sync:all": "pnpm sync:skill && pnpm sync:version && pnpm build && pnpm sync:cache",
     "test": "node scripts/check-sdk.mjs",
     "typecheck": "node scripts/check-sdk.mjs"
   },
