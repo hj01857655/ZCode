@@ -7466,6 +7466,7 @@ const ruRU: Record<string, string> = {
   "chat.error.action.relogin": "Войти снова",
   "chat.error.action.refreshQuota": "Обновить квоту",
   "chat.error.action.switchModel": "Сменить модель",
+  "chat.error.action.retryCaptcha": "Пройти проверку снова",
   "chat.error.action.retryLater": "Повторить позже",
   "chat.error.copyTraceId": "Копировать TraceID",
   "chat.error.copyFull": "Копировать",

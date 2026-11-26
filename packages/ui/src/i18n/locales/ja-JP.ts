@@ -7495,6 +7495,7 @@ const jaJP: Record<string, string> = {
   "chat.error.action.relogin": "再度サインイン",
   "chat.error.action.refreshQuota": "クォータを更新",
   "chat.error.action.switchModel": "モデルを切り替え",
+  "chat.error.action.retryCaptcha": "もう一度認証する",
   "chat.error.action.retryLater": "後でもう一度お試しください",
   "chat.error.copyTraceId": "TraceID をコピー",
   "chat.error.copyFull": "コピー",

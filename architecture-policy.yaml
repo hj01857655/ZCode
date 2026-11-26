@@ -2584,3 +2584,25 @@ exceptions:
     paths:
       - apps/zcode-cli/packages/cli/src/browser-state-option.ts
     reason: --browser-state 与 --no-browser-state 的参数校验与来源解析（docs/browser-use/2026-11-17-cli-browser-state-spec.md §4），只被已有 unmanaged 的 CLI 入口 run.ts 调用。不新增模块边界或状态 owner；接管整个 zcode-cli 不在本次范围内。
+  - id: cli-tui-prompt-handler-runtime-telemetry-removal-edit
+    rule: unmanaged-new-file
+    paths:
+      - apps/zcode-cli/packages/cli/src/tui-prompt-handler-runtime.ts
+    reason: 已准入的 TUI 进程运行时装配只删除遥测 env 准备与关闭句柄（遥测整体移除，apps/zcode-cli/docs/design/v2/zcode-protocol-agent-server.md「协议进程生命周期」）；App 与 Provider Registry 重新共用同一个 env 对象，不新增文件、owner 或模块边界，接管整个 zcode-cli 不在本次范围内。
+  - id: parallel-request-security-client-signing-admission
+    rule: unmanaged-new-file
+    paths:
+      - apps/zcode-cli/packages/adapters/src/model/client-signing/**
+    reason: 并行作者新增的客户端请求签名原语与凭据解析已由 CLI 侧 request-security-edition 调用；本次未改动其内容与接口，仅为这些既有文件登记准入，不接管 adapters 模块边界或签名 owner。
+  - id: parallel-request-security-edition-admission
+    rule: unmanaged-new-file
+    paths:
+      - apps/zcode-cli/packages/adapters/src/model/request-security-edition/**
+      - packages/desktop/src/main/request-security-edition/**
+      - packages/ui/src/request-security-edition/**
+    reason: 并行作者新增的请求安全校验跨 CLI/desktop/UI 三层；本次只修复其中 UI 的类型与文案接线，不改动其余文件，不接管这些未受管模块的边界或 owner。
+  - id: parallel-cua-executor-admission
+    rule: unmanaged-new-file
+    paths:
+      - packages/zcode-cua/executor/**
+    reason: 并行作者把 native-input / screenshot / hold-key 原语拆到独立 executor 目录，已由 packages/zcode-cua/index.js 引用；本次未改动其内容，仅登记准入，不接管 zcode-cua 的模块边界。

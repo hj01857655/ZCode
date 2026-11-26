@@ -7322,6 +7322,7 @@ const koKR: Record<string, string> = {
   "chat.error.action.relogin": "다시 로그인",
   "chat.error.action.refreshQuota": "할당량 새로고침",
   "chat.error.action.switchModel": "모델 전환",
+  "chat.error.action.retryCaptcha": "다시 인증하기",
   "chat.error.action.retryLater": "나중에 다시 시도",
   "chat.error.copyTraceId": "TraceID 복사",
   "chat.error.copyFull": "복사",
