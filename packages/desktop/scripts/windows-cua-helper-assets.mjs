@@ -337,6 +337,31 @@ function readProducerRuntimeContract(packageJson, sourceRoot) {
   };
 }
 
+/**
+ * Helper 运行时需要的第三方包由 producer 显式声明；entry 自包含时可声明空数组。
+ * 未声明时回退到 package.json.dependencies，兼容按“全部运行时依赖”发布的 producer。
+ */
+function readHelperRuntimeDependencies(packageJson) {
+  const declared = packageJson.zcodeCuaHelperRuntimeDependencies;
+  if (declared === undefined) {
+    return Object.keys(packageJson.dependencies ?? {});
+  }
+  if (!Array.isArray(declared) || !declared.every((name) => isNonEmptyTrimmedString(name))) {
+    throw new Error(
+      "[windows-cua-helper-assets] zcodeCuaHelperRuntimeDependencies must be an array of dependency names",
+    );
+  }
+  return [...new Set(declared)];
+}
+
+function expandSharpRuntimeDependencies(runtimeDependencyNames, targetPlatform) {
+  return runtimeDependencyNames.flatMap((name) =>
+    name === "sharp"
+      ? resolveSharpRuntimePackageNames({ os: "win32", arch: targetPlatform.arch })
+      : [name],
+  );
+}
+
 function assertPhysicalContainment(root, artifactPath, label) {
   const relativePath = relative(root, artifactPath);
   if (
@@ -374,7 +399,7 @@ function resolvePackagedRuntimePackageRoot(nodeModulesRoot, packageName) {
 async function verifyPackagedRuntimeDependencyClosure({
   root,
   physicalRoot,
-  targetPlatform,
+  runtimeDependencyNames,
   lstatOperation,
   realpathOperation,
   readFileOperation,
@@ -444,8 +469,7 @@ async function verifyPackagedRuntimeDependencyClosure({
     }
   };
 
-  const runtimePackageNames = ["express", ...resolveSharpRuntimePackageNames(targetPlatform)];
-  for (const packageName of runtimePackageNames) {
+  for (const packageName of runtimeDependencyNames) {
     await verifyPackage(packageName);
   }
 }
@@ -606,6 +630,22 @@ async function inspectPackagedWindowsCuaHelper({
     );
   }
 
+  // runtimeDependencies 由 prepare 按 producer 声明写入；旧产物没有该字段时按历史闭包校验。
+  const declaredRuntimeDependencies = moduleTypePackageJson.runtimeDependencies;
+  if (
+    declaredRuntimeDependencies !== undefined &&
+    (!Array.isArray(declaredRuntimeDependencies) ||
+      !declaredRuntimeDependencies.every((name) => isNonEmptyTrimmedString(name)))
+  ) {
+    throw new Error(
+      `[windows-cua-helper-assets] ${MODULE_TYPE_PACKAGE_JSON} runtimeDependencies must be an array of dependency names: ${moduleTypePackageJsonPath}`,
+    );
+  }
+  const runtimeDependencyNames = expandSharpRuntimeDependencies(
+    declaredRuntimeDependencies ?? ["express", "sharp"],
+    targetPlatform,
+  );
+
   const entryPath = resolveCanonicalPackagedArtifact(root, manifest.entry, "entry");
   const addonPath = resolveCanonicalPackagedArtifact(root, manifest.addon, "addon");
   const [entryBytes, addonBytes] = await Promise.all([
@@ -646,7 +686,7 @@ async function inspectPackagedWindowsCuaHelper({
   await verifyPackagedRuntimeDependencyClosure({
     root,
     physicalRoot,
-    targetPlatform,
+    runtimeDependencyNames,
     lstatOperation,
     realpathOperation,
     readFileOperation,
@@ -899,21 +939,24 @@ export async function prepareWindowsCuaHelperAssets({
     ]);
 
     const moduleLookupRoots = resolveModuleLookupRoots(sourceRoot);
-    const expressEntries = collectRuntimeModuleClosureEntries(["express"], moduleLookupRoots);
-    const sharpModuleNames = resolveSharpRuntimePackageNames({
-      os: "win32",
-      arch: targetPlatform.arch,
-    });
+    const runtimeDependencyNames = readHelperRuntimeDependencies(packageJson);
+    const sharpModuleNames = runtimeDependencyNames.includes("sharp")
+      ? resolveSharpRuntimePackageNames({ os: "win32", arch: targetPlatform.arch })
+      : [];
     const sharpModuleNameSet = new Set(sharpModuleNames);
     // Sharp 声明了所有平台的 optionalDependencies；这里只保留当前目标集合，
     // 避免把其他架构的原生包带进安装包和签名面。
+    const declaredEntries = collectRuntimeModuleClosureEntries(
+      runtimeDependencyNames.filter((name) => name !== "sharp"),
+      moduleLookupRoots,
+    );
     const sharpEntries = collectRuntimeModuleClosureEntries(
       sharpModuleNames,
       moduleLookupRoots,
     ).filter((entry) => sharpModuleNameSet.has(entry.moduleName));
     const runtimeEntries = [
       ...new Map(
-        [...expressEntries, ...sharpEntries].map((entry) => [entry.moduleName, entry]),
+        [...declaredEntries, ...sharpEntries].map((entry) => [entry.moduleName, entry]),
       ).values(),
     ];
     for (const entry of runtimeEntries) {
@@ -962,6 +1005,9 @@ export async function prepareWindowsCuaHelperAssets({
       type: "module",
       private: true,
       main: producerContract.entry,
+      // afterPack 没有 producer 的 package.json，依赖闭包必须随产物自带，
+      // 否则校验只能退化成写死的包名列表。
+      runtimeDependencies: runtimeDependencyNames,
     };
     await writeFile(
       resolve(stagedTempRoot, MODULE_TYPE_PACKAGE_JSON),

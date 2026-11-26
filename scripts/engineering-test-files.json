@@ -164,6 +164,7 @@
   "packages/desktop/test/webRemoteControlAuthGateFixture.test.ts",
   "packages/desktop/test/webRemoteTerminalProbe.test.ts",
   "packages/desktop/test/windows-e2e-shards.test.ts",
+  "packages/desktop/test/windowsCuaHelperAssets.test.ts",
   "packages/desktop/test/windowsInstallerCompile.test.ts",
   "packages/desktop/test/windowsInstallerNshSmoke.test.ts",
   "packages/desktop/test/windowsInstallerPreserveFiles.test.ts",

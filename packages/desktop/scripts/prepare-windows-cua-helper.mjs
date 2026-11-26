@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import process from "node:process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +29,16 @@ const sourceRoot = await resolveWindowsCuaHelperSourceRoot({
   devRoot: process.env.ZCODE_CUA_DEV_ROOT,
   servicesPackageRoot,
 });
+
+// addon 是契约必检产物，随源码分发；缺失即失败，不能现场编译——自研构建会覆盖官方原件。
+const sourcePackage = JSON.parse(await readFile(resolve(sourceRoot, "package.json"), "utf8"));
+const addonRelativePath = sourcePackage.zcodeCuaRuntime?.windows?.nativeAddon;
+if (typeof addonRelativePath === "string" && !existsSync(resolve(sourceRoot, ...addonRelativePath.split("/")))) {
+  throw new Error(
+    `[prepare-windows-cua-helper] missing ${addonRelativePath} in ${sourceRoot}`,
+  );
+}
+
 const result = await prepareWindowsCuaHelperAssets({
   sourceRoot,
   outputRoot: resolve(desktopPackageRoot, "bundled-tools"),
