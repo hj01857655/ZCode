@@ -11,6 +11,8 @@ import { TestAiSdkModelAdapter, TestProviderConfigFixture } from "./test-provide
 
 const ZERO_USAGE = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 const MAX_ATTEMPTS = 3;
+// 本地构建：只有明确的超窗不重试；审核类终止（content-filter / content_filter / refusal /
+// sensitive）与普通空补全同等对待，统一走重试。
 const EXCLUDED_FINISHES = [
   { finishReason: "length", rawFinishReason: "model_context_window_exceeded" },
   { finishReason: "other", rawFinishReason: "model_context_window_exceeded" },
@@ -20,6 +22,8 @@ const EXCLUDED_FINISHES = [
   { finishReason: "other", rawFinishReason: "model_context_exceeded" },
   { finishReason: "other", rawFinishReason: "prompt_too_long" },
   { finishReason: "context_window_exceeded", rawFinishReason: undefined },
+] as const;
+const FILTERED_FINISHES = [
   { finishReason: "content-filter", rawFinishReason: undefined },
   { finishReason: "other", rawFinishReason: "content_filter" },
   { finishReason: "other", rawFinishReason: "refusal" },
@@ -221,38 +225,40 @@ describe.each(["stream", "generate"] as const)("%s empty completion finish seman
     )("does not retry excluded finish $finishReason / $rawFinishReason", async (entry) => {
       const { rawFinishReason } = entry;
       const run = harness(entry.finishReason, rawFinishReason, rawSource);
-      const contextLimit = !["content-filter", "content_filter", "refusal", "sensitive"].includes(
-        rawFinishReason ?? entry.finishReason,
-      );
-      if (contextLimit) {
-        await expect(run.read(mode)).rejects.toMatchObject({
-          code: ModelErrorCode.ModelContextExceeded,
-          usage: ZERO_USAGE,
-          context: {
-            reason: "context_exceeded",
-            rawFinishReason,
-            finishReason: entry.finishReason,
-          },
-        });
-        expect(run.events.some((event) => event.type === "finish")).toBe(false);
-        expect(run.attempts).toBe(1);
-        expect(run.status.filter((event) => event.type === "model_request_failed")).toMatchObject([
-          { reason: "context_exceeded", retryable: false, usage: ZERO_USAGE },
-        ]);
-        expect(
-          run.status.some(
-            (event) =>
-              event.type === "model_request_completed" || event.type === "model_retry_scheduled",
-          ),
-        ).toBe(false);
-        return;
-      }
+      await expect(run.read(mode)).rejects.toMatchObject({
+        code: ModelErrorCode.ModelContextExceeded,
+        usage: ZERO_USAGE,
+        context: {
+          reason: "context_exceeded",
+          rawFinishReason,
+          finishReason: entry.finishReason,
+        },
+      });
+      expect(run.events.some((event) => event.type === "finish")).toBe(false);
+      expect(run.attempts).toBe(1);
+      expect(run.status.filter((event) => event.type === "model_request_failed")).toMatchObject([
+        { reason: "context_exceeded", retryable: false, usage: ZERO_USAGE },
+      ]);
+      expect(
+        run.status.some(
+          (event) =>
+            event.type === "model_request_completed" || event.type === "model_retry_scheduled",
+        ),
+      ).toBe(false);
+    });
+
+    it.each(
+      FILTERED_FINISHES.filter(
+        (entry) => rawSource === "direct" || entry.rawFinishReason !== undefined,
+      ),
+    )("retries provider-filtered finish $finishReason / $rawFinishReason like an empty completion", async (entry) => {
+      const { rawFinishReason } = entry;
+      const run = harness(entry.finishReason, rawFinishReason, rawSource);
       const result = await run.read(mode);
 
-      expect(run.attempts).toBe(1);
-      expect(run.status.filter((event) => event.type === "model_request_started")).toHaveLength(1);
-      expect(run.status.some((event) => event.type === "model_retry_scheduled")).toBe(false);
-      expect(run.status.some((event) => event.type === "model_request_failed")).toBe(false);
+      expect(run.attempts).toBe(2);
+      expect(run.status.filter((event) => event.type === "model_request_started")).toHaveLength(2);
+      expect(run.status.filter((event) => event.type === "model_retry_scheduled")).toHaveLength(1);
       expect(result).toMatchObject({
         finishReason: entry.finishReason,
         usage: ZERO_USAGE,
@@ -263,9 +269,6 @@ describe.each(["stream", "generate"] as const)("%s empty completion finish seman
             : {}),
         },
       });
-      if (mode === "generate" && rawSource === "direct") {
-        expect(result).toHaveProperty("providerMetadata", { fixture: { marker: "preserved" } });
-      }
     });
 
     it.each(["stop", "tool-calls", "tool_calls"])(

@@ -432,11 +432,9 @@ const CONTEXT_LIMIT_FINISH_REASONS = new Set([
   "prompt_too_long",
 ]);
 
-const EMPTY_COMPLETION_RETRY_EXCLUSIONS = new Set([
-  ...CONTEXT_LIMIT_FINISH_REASONS,
-  "refusal",
-  // 本地构建：content_filter/sensitive 不再排除重试——审核截断的回复与普通空补全同等对待。
-]);
+// 本地构建：只有明确的超窗才不重试；content_filter/sensitive/refusal 等审核类终止
+// 与普通空补全同等对待，走同一条重试路径。
+const EMPTY_COMPLETION_RETRY_EXCLUSIONS = new Set([...CONTEXT_LIMIT_FINISH_REASONS]);
 
 export function createEmptyContextExceededError(input: {
   finishReason?: string;

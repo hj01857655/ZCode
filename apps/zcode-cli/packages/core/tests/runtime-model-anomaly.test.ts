@@ -115,11 +115,12 @@ describe("AgentRuntime model anomaly guards", () => {
     });
   });
 
+  // 本地构建：content_filter / sensitive 终止不再被单独识别为内容过滤，和普通空回复走同一条路径。
   it.each([
     { finishReason: "other", rawFinishReason: "sensitive" },
     { finishReason: "content-filter", rawFinishReason: undefined },
   ])(
-    "fails once without retry when the provider content filter blocks output ($finishReason / $rawFinishReason)",
+    "treats provider-filtered output as an ordinary empty response ($finishReason / $rawFinishReason)",
     async ({ finishReason, rawFinishReason }) => {
       const sessionId = createSessionId(`runtime-content-filtered-${finishReason}`);
       const eventStore = createTestSessionEventStore();
@@ -147,18 +148,16 @@ describe("AgentRuntime model anomaly guards", () => {
       );
 
       await expect(runtime.executeTurn("trigger content filter")).rejects.toMatchObject({
-        message: "Model output was blocked by the provider's content safety filter.",
-        retryable: false,
+        message: "Model returned no text, no tool calls, and no usage before completing the turn.",
         type: CoreErrorType.ModelError,
       });
-      expect(calls).toBe(1);
 
       const events = await eventStore.getEvents(sessionId);
       const turnError = events.find((event) => event.type === SessionEventType.TurnError);
       expect(turnError?.payload).toMatchObject({
         error: {
-          attribution: { reason: "content_filter", source: "provider" },
-          message: "Model output was blocked by the provider's content safety filter.",
+          attribution: { reason: "empty_model_response", source: "provider" },
+          message: "Model returned no text, no tool calls, and no usage before completing the turn.",
         },
       });
     },

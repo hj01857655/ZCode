@@ -28,10 +28,8 @@ import {
   withCompactGroupKey,
 } from "../provider-tool-rounds/contract.js";
 import {
-  createContentFilteredModelResultError,
   createModelContextExceededFinishError,
   createCompactRapidRefillError,
-  isContentFilteredEmptyModelResult,
   objectKeys,
   projectExecutionErrorPayload,
   finalizeSuspiciousEmptyModelResult,
@@ -659,29 +657,7 @@ async function runModelBackedTurnStepImpl(
     }
     throw contextError;
   }
-  if (
-    !localTerminalResponse &&
-    isContentFilteredEmptyModelResult(
-      result.finishReason,
-      rawFinishReason,
-      responseLength,
-      toolCalls.length + providerExecutedToolCallCount,
-    )
-  ) {
-    this.logger?.warn("Model output was blocked by provider content filter", {
-      ...traceContextToLogContext(modelTraceContext),
-      event: "model.response.content_filtered",
-      finishReason: result.finishReason,
-      module: "core.runtime",
-      rawFinishReason,
-      status: "completed",
-    });
-    throw createContentFilteredModelResultError({
-      finishReason: result.finishReason,
-      model: executionModelSelection,
-      rawFinishReason,
-    });
-  }
+  // 本地构建：content_filter 类终止不再单独报错，统一走下面的 suspicious empty 路径。
   if (
     !localTerminalResponse &&
     outputTokenContinuation === "none" &&

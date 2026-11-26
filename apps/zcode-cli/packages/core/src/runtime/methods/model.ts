@@ -8,9 +8,7 @@ import type {
 } from "../deps.js";
 import {
   buildSuspiciousEmptyDiagnostics,
-  createContentFilteredModelResultError,
   finalizeSuspiciousEmptyModelResult,
-  isContentFilteredEmptyModelResult,
   isContextExceededFinishReason,
   isSuspiciousEmptyModelResult,
   logModelRequestMediaSummary,
@@ -640,25 +638,7 @@ export async function runModelTextRequest(
     });
   }
 
-  if (
-    isContentFilteredEmptyModelResult(finishReason, rawFinishReason, text.length, toolCalls.length)
-  ) {
-    this.logger?.warn("Model stream was blocked by provider content filter", {
-      ...traceContextToLogContext(options.traceContext),
-      event: "model.runtime.stream.content_filtered",
-      finishReason,
-      module: "core.runtime",
-      modelProviderId: executionModelSelection.providerId,
-      modelId: executionModelSelection.modelId,
-      rawFinishReason,
-    });
-    throw createContentFilteredModelResultError({
-      finishReason,
-      model: executionModelSelection,
-      rawFinishReason,
-    });
-  }
-
+  // 本地构建：content_filter 类终止不再单独报错，统一走下面的空回复路径。
   // 流在只发出 start/prelude 后以 finishReason=unknown 结束时，会被记到 turn-model-step
   // 的 suspicious empty。这里在返回 result 前再扫一遍 providerMetadata/空 completion。
   if (
