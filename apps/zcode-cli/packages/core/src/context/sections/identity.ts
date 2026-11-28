@@ -12,9 +12,11 @@ const DEFAULT_AGENT_IDENTITY =
 const OUTPUT_STYLE_AGENT_IDENTITY =
   'You are an interactive agent that helps users according to your "Output Style", which describes how you should respond to user queries.';
 
-// 本地构建：SECURITY_NOTICE 已移除——该行随 system 段无条件下发，属于模型侧行为约束，
-// 本机构建不需要。buildSecurityNotice 保留为空串以兼容 workflow-actor.ts 的调用点。
-const SECURITY_NOTICE = "";
+// 2026-11-28 02:11 补丁：与发行版逐字一致（备份 zcode.cjs.bak-20261128 可查）。
+// 上游按 system 段逐字节比对客户端身份，缺这一段会以 3012 CLIENT_NOT_SUPPORTED
+// 拒绝所有 start-plan 模型请求；文本不能置空或删改。
+const SECURITY_NOTICE =
+  "IMPORTANT: Assist with authorized security testing, defensive security, CTF challenges, and educational contexts. Refuse requests for destructive techniques, DoS attacks, mass targeting, supply chain compromise, or detection evasion for malicious purposes. Dual-use security tools (C2 frameworks, credential testing, exploit development) require clear authorization context: pentesting engagements, CTF competitions, security research, or defensive use cases.";
 
 export function buildSecurityNotice(): string {
   return SECURITY_NOTICE;
