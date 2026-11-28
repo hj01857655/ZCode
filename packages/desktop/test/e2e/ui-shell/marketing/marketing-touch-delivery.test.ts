@@ -127,7 +127,7 @@ describe("Marketing Touch delivery", () => {
           title.startsWith("MTE-06 stale popup") ||
           title.startsWith("MTE-08:") ||
           title.startsWith("MTE-09:"),
-        banner: title.startsWith("MTC-11:") || title.startsWith("MTE-06 stale banner"),
+        banner: title.startsWith("MTC-11:"),
       }),
     });
     // 英文文案和请求头必须由夹具明确声明；先退出，避免旧进程的关闭写回覆盖语言。
@@ -162,15 +162,12 @@ describe("Marketing Touch delivery", () => {
       }
       await byId("cloud-content-dialog").waitForExist({ reverse: true });
     };
-    it(`MTE-04 independent ${source}: reports one cancel through the actual dismissal surface`, async () => {
+    it(`MTE-04 independent ${source}: never reports cancellation through the dismissal surface`, async () => {
       await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15_000 });
       await dismiss();
-      await browser.waitUntil(async () => (await ledger()).events.length === 1);
-      // 再次按 Esc 不能对已关闭的投放重复上报。
+      // 关闭只做本地隐藏，不上报 cancel；再次按 Esc 也不能对已关闭的投放产生上报。
       await browser.keys("Escape");
-      expect((await ledger()).events).toEqual([
-        { campaign_id: "independent", action_type: "cancel" },
-      ]);
+      expect((await ledger()).events).toEqual([]);
       expect(
         (await ledger()).requests.filter((path) => path.endsWith("/billing/claim")),
       ).toHaveLength(0);
@@ -183,7 +180,7 @@ describe("Marketing Touch delivery", () => {
       imageDataUri(assets.darkImage),
     ]);
     expect(light).not.toBe(dark);
-    const campaignId = await deliverHero({
+    await deliverHero({
       type: "image",
       image: { default: assets.image, dark: assets.darkImage },
     });
@@ -207,8 +204,9 @@ describe("Marketing Touch delivery", () => {
       );
     }
     await byId("cloud-dialog-action").click();
-    await browser.waitUntil(async () => (await ledger()).events.length === 1);
-    expect((await ledger()).events).toEqual([{ campaign_id: campaignId, action_type: "cancel" }]);
+    await byId("cloud-content-dialog").waitForExist({ reverse: true });
+    // 关闭只做本地隐藏，不向服务端上报 cancel 消费投放。
+    expect((await ledger()).events).toEqual([]);
   });
   it("MTE-17 invalid dark image: retains the valid default resource", async () => {
     const assets = await fixtureAssets();
@@ -328,50 +326,45 @@ describe("Marketing Touch delivery", () => {
     expect(await description.$$("span")).toHaveLength(0);
     expect((await ledger()).events).toEqual([]);
   });
-  for (const surface of ["banner", "popup"] as const) {
-    it(`MTE-06 stale ${surface}: ignores pre-close response and accepts fresh redelivery`, async () => {
-      const content = byId(surface === "banner" ? "marketing-banner" : "cloud-content-dialog");
-      await content.waitForDisplayed({ timeout: 15_000 });
-      const control = async (action: string) => {
-        expect(
-          (await fetch(`${origin()}/__e2e/marketing/query-${action}`, { method: "POST" })).ok,
-        ).toBe(true);
-      };
-      const queries = async () =>
-        (await ledger()).requests.filter((p) => p === "/api/v1/marketing/touch").length;
-      await control("hold");
-      try {
-        await browser.execute(() => window.dispatchEvent(new Event("online")));
-        await browser.waitUntil(async () => (await ledger()).pendingQueries === 1);
-        const count = await queries();
-        if (surface === "banner") await bannerClose().click();
-        else await content.$('[data-slot="dialog-close"]').click();
-        await content.waitForExist({ reverse: true });
-        await browser.waitUntil(async () => (await ledger()).events.length === 1);
-        await browser.execute(() => {
-          for (let i = 0; i < 3; i++) window.dispatchEvent(new Event("online"));
-        });
-        expect(await queries()).toBe(count);
-        await control("release-one");
-        await browser.waitUntil(
-          async () => (await queries()) === count + 1 && (await ledger()).pendingQueries === 1,
-        );
-        expect(await content.isExisting()).toBe(false);
-        expect((await ledger()).events).toEqual([
-          { campaign_id: surface === "banner" ? "banner-1" : "independent", action_type: "cancel" },
-        ]);
-      } finally {
-        await control("release-all");
-      }
-      await fetch(`${origin()}/__e2e/marketing/redeliver-${surface}`, { method: "POST" });
+  // banner 已不可关闭，迟到快照的失效场景只存在于可关闭的 popup。
+  it("MTE-06 stale popup: ignores pre-close response and accepts fresh redelivery", async () => {
+    const content = byId("cloud-content-dialog");
+    await content.waitForDisplayed({ timeout: 15_000 });
+    const control = async (action: string) => {
+      expect(
+        (await fetch(`${origin()}/__e2e/marketing/query-${action}`, { method: "POST" })).ok,
+      ).toBe(true);
+    };
+    const queries = async () =>
+      (await ledger()).requests.filter((p) => p === "/api/v1/marketing/touch").length;
+    await control("hold");
+    try {
       await browser.execute(() => window.dispatchEvent(new Event("online")));
-      await content.waitForDisplayed({ timeout: 15_000 });
-      expect((await ledger()).events).toHaveLength(1);
-    });
-  }
+      await browser.waitUntil(async () => (await ledger()).pendingQueries === 1);
+      const count = await queries();
+      await content.$('[data-slot="dialog-close"]').click();
+      await content.waitForExist({ reverse: true });
+      await browser.execute(() => {
+        for (let i = 0; i < 3; i++) window.dispatchEvent(new Event("online"));
+      });
+      expect(await queries()).toBe(count);
+      await control("release-one");
+      await browser.waitUntil(
+        async () => (await queries()) === count + 1 && (await ledger()).pendingQueries === 1,
+      );
+      expect(await content.isExisting()).toBe(false);
+      // 关闭是纯本地动作：迟到快照被丢弃，也不会补报 cancel。
+      expect((await ledger()).events).toEqual([]);
+    } finally {
+      await control("release-all");
+    }
+    await fetch(`${origin()}/__e2e/marketing/redeliver-popup`, { method: "POST" });
+    await browser.execute(() => window.dispatchEvent(new Event("online")));
+    await content.waitForDisplayed({ timeout: 15_000 });
+    expect((await ledger()).events).toHaveLength(0);
+  });
   it("MTE-06 stale prepared bundle is discarded after popup close", async () => {
     await deliverAction({ type: "close" });
-    const closedCampaign = currentActionCampaignId;
     const control = (name: string) =>
       fetch(`${origin()}/__e2e/marketing/${name}`, { method: "POST" });
     await control("asset-hold");
@@ -387,20 +380,18 @@ describe("Marketing Touch delivery", () => {
       expect(await byId("marketing-banner").isExisting()).toBe(false);
       await byId("cloud-content-dialog").$('[data-slot="dialog-close"]').click();
       await byId("cloud-content-dialog").waitForExist({ reverse: true });
-      await browser.waitUntil(async () => (await ledger()).events.length === 1);
       await control("query-hold");
       await browser.execute(() => window.dispatchEvent(new Event("online")));
       await control("asset-release");
       // 下一 GET 已进入服务端，证明旧资源准备已收口，不用睡眠猜测迟到结果。
       await browser.waitUntil(async () => (await ledger()).pendingQueries === 1);
       expect(await byId("marketing-banner").isExisting()).toBe(false);
-      expect((await ledger()).events).toEqual([
-        { campaign_id: closedCampaign, action_type: "cancel" },
-      ]);
+      // 关闭不产生上报；新 banner 由服务端重新投放抵达。
+      expect((await ledger()).events).toEqual([]);
       await control("query-release-all");
       await byId("marketing-banner").waitForDisplayed({ timeout: 15_000 });
       expect(await byId("marketing-banner").$("iframe").getAttribute("data-status")).toBe("ready");
-      expect((await ledger()).events).toHaveLength(1);
+      expect((await ledger()).events).toHaveLength(0);
     } finally {
       await control("asset-release");
       await control("query-release-all");
@@ -435,7 +426,7 @@ describe("Marketing Touch delivery", () => {
     for (const fallback of [false, true]) {
       it(`MTE-11 handshake ${mode} fallback=${fallback}`, async () => {
         const assets = await fixtureAssets();
-        const campaign = await deliverHero({
+        await deliverHero({
           type: "bundle",
           args: { mode },
           bundle: {
@@ -452,8 +443,9 @@ describe("Marketing Touch delivery", () => {
         expect(await byId("cloud-dialog-interactive-hero").isExisting()).toBe(false);
         expect((await ledger()).events).toEqual([]);
         await byId("cloud-content-dialog").$('[data-slot="dialog-close"]').click();
-        await browser.waitUntil(async () => (await ledger()).events.length === 1);
-        expect((await ledger()).events).toEqual([{ campaign_id: campaign, action_type: "cancel" }]);
+        await byId("cloud-content-dialog").waitForExist({ reverse: true });
+        // 关闭不上报 cancel：未领取成功的投放必须能被服务端继续投放。
+        expect((await ledger()).events).toEqual([]);
       });
     }
   }
@@ -482,7 +474,7 @@ describe("Marketing Touch delivery", () => {
   });
   it("MTE-11 invalid messages from the actual iframe preserve ready state", async () => {
     const assets = await fixtureAssets();
-    const campaign = await deliverHero({
+    await deliverHero({
       type: "bundle",
       bundle: { bundle: assets.bundle, entry: "index.html" },
     });
@@ -515,8 +507,8 @@ describe("Marketing Touch delivery", () => {
     expect(await byId("cloud-dialog-hero-error").isExisting()).toBe(false);
     expect((await ledger()).events).toEqual([]);
     await byId("cloud-content-dialog").$('[data-slot="dialog-close"]').click();
-    await browser.waitUntil(async () => (await ledger()).events.length === 1);
-    expect((await ledger()).events).toEqual([{ campaign_id: campaign, action_type: "cancel" }]);
+    await byId("cloud-content-dialog").waitForExist({ reverse: true });
+    expect((await ledger()).events).toEqual([]);
   });
   it("MTE-11 forged parent message cannot invalidate a ready iframe", async () => {
     const assets = await fixtureAssets();
@@ -539,7 +531,7 @@ describe("Marketing Touch delivery", () => {
   for (const fallback of [false, true]) {
     it(`MTE-10 invalid zip: ${fallback ? "uses the prepared fallback" : "omits the unavailable hero"}`, async () => {
       const assets = await fixtureAssets();
-      const campaignId = await deliverHero({
+      await deliverHero({
         type: "bundle",
         bundle: {
           bundle: assets.invalidZip,
@@ -556,8 +548,8 @@ describe("Marketing Touch delivery", () => {
         );
       expect((await ledger()).requests).toContain("/marketing-assets/invalid.zip");
       await byId("cloud-dialog-action").click();
-      await browser.waitUntil(async () => (await ledger()).events.length === 1);
-      expect((await ledger()).events).toEqual([{ campaign_id: campaignId, action_type: "cancel" }]);
+      await byId("cloud-content-dialog").waitForExist({ reverse: true });
+      expect((await ledger()).events).toEqual([]);
     });
   }
   it("MTE-17 invalid default image: shows dialog text without broken media", async () => {
@@ -567,7 +559,7 @@ describe("Marketing Touch delivery", () => {
     expect(await byId("cloud-content-dialog").getText()).toContain("E2E media boundary");
     expect((await ledger()).requests).toContain("/marketing-assets/invalid.png");
   });
-  it("MTE-08: starts seq at zero, carries required headers and does not count action reports", async () => {
+  it("MTE-08: starts seq at zero, carries required headers and submits no action report on dismissal", async () => {
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15_000 });
     const queries = (state: Awaited<ReturnType<typeof ledger>>) =>
       state.requestDetails.filter((request) => request.path === "/api/v1/marketing/touch");
@@ -582,42 +574,39 @@ describe("Marketing Touch delivery", () => {
       expect(request.headers.authenticated).toBe(true);
     }
     await byId("cloud-dialog-action").click();
-    await browser.waitUntil(async () => (await ledger()).events.length === 1);
+    await byId("cloud-content-dialog").waitForExist({ reverse: true });
     await browser.execute(() => window.dispatchEvent(new Event("online")));
     await browser.waitUntil(async () => queries(await ledger()).length > initial.length);
     const state = await ledger();
     expect(queries(state).map((request) => Number(request.seq))).toEqual(
       queries(state).map((_, index) => index),
     );
-    const reports = state.requestDetails.filter((request) =>
-      request.path.endsWith("/touch/action"),
-    );
-    expect(reports).toHaveLength(1);
-    expect(reports[0]).toMatchObject({ method: "POST", seq: null });
+    // 关闭不上报 action：既不产生 /touch/action POST，也不占用查询 seq。
+    expect(
+      state.requestDetails.filter((request) => request.path.endsWith("/touch/action")),
+    ).toHaveLength(0);
     expect(await byId("cloud-content-dialog").isExisting()).toBe(false);
   });
-  it("MTE-09: a failed report does not block dismissal or automatically retry", async () => {
+  it("MTE-09: dismissal never reports, even with a failing report endpoint, and reopens on redelivery", async () => {
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15_000 });
+    // 关闭路径不应触达上报端点；把上报置为故障后仍要求零上报，证明不是"重试成功"而是根本没发。
     await fetch(`${origin()}/__e2e/marketing/faults`, {
       method: "POST",
       body: JSON.stringify({ reportStatus: 500 }),
     });
     await byId("cloud-dialog-action").click();
     await byId("cloud-content-dialog").waitForExist({ reverse: true });
-    await browser.waitUntil(async () => (await ledger()).events.length === 1);
-    // 用新一轮真实查询作为完成屏障：服务端仍投放同 ID，客户端可以再次显示，但不能自动重报。
+    // 用新一轮真实查询作为屏障：服务端仍投放同 ID，关闭后应可再次显示，且不删除投放清单。
     await browser.execute(() => window.dispatchEvent(new Event("online")));
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15_000 });
-    expect((await ledger()).events).toEqual([
-      { campaign_id: "independent", action_type: "cancel" },
-    ]);
+    expect((await ledger()).events).toEqual([]);
     await fetch(`${origin()}/__e2e/marketing/faults`, { method: "POST", body: "{}" });
     await byId("cloud-dialog-action").click();
     await byId("cloud-content-dialog").waitForExist({ reverse: true });
-    await browser.waitUntil(async () => (await ledger()).events.length === 2);
-    expect((await ledger()).events).toEqual(
-      Array.from({ length: 2 }, () => ({ campaign_id: "independent", action_type: "cancel" })),
-    );
+    expect((await ledger()).events).toEqual([]);
+    expect(
+      (await ledger()).requestDetails.filter((request) => request.path.endsWith("/touch/action")),
+    ).toHaveLength(0);
   });
   it("MTE-07: recovers from query failure on online and keeps monotonic sequence", async () => {
     await fetch(`${origin()}/__e2e/marketing/faults`, {
@@ -639,13 +628,13 @@ describe("Marketing Touch delivery", () => {
     await deliverAction({ type: "close" });
     await byId("cloud-dialog-action").click();
     await byId("cloud-content-dialog").waitForExist({ reverse: true });
-    await browser.waitUntil(async () => (await ledger()).events.length === 1);
+    expect((await ledger()).events).toEqual([]);
     const queries = (await ledger()).requestDetails.filter(
       (request) => request.path === "/api/v1/marketing/touch",
     );
     expect(queries.map((request) => Number(request.seq))).toEqual(queries.map((_, index) => index));
   });
-  it("MTC-01/07/08: opens the independent popup and reports cancel exactly once", async () => {
+  it("MTC-01/07/08: opens the independent popup and never reports cancellation", async () => {
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 40_000 });
     expect(await byId("cloud-content-dialog").getText()).toContain("E2E independent popup");
     const closeButton = byId("cloud-content-dialog").$('[data-slot="dialog-close"]');
@@ -681,39 +670,69 @@ describe("Marketing Touch delivery", () => {
     );
     await byId("cloud-dialog-action").click();
     await byId("cloud-content-dialog").waitForExist({ reverse: true });
-    await browser.waitUntil(async () => (await ledger()).events.length === 1);
-    expect((await ledger()).events).toEqual([
-      { campaign_id: "independent", action_type: "cancel" },
-    ]);
+    expect((await ledger()).events).toEqual([]);
   });
-  it("MTC-11: polls a closed campaign again and reports the next close", async () => {
-    await byId("marketing-banner").waitForDisplayed();
-    await bannerClose().click();
-    await browser.waitUntil(async () => (await ledger()).events.length === 1);
-    await fetch(`${origin()}/__e2e/marketing/redeliver-banner`, { method: "POST" });
-    await byId("marketing-banner").waitForDisplayed({ timeout: 45_000 });
-    await bannerClose().click();
-    await byId("marketing-banner").waitForExist({ reverse: true });
-    await browser.waitUntil(async () => (await ledger()).events.length === 2);
-    expect((await ledger()).events[1]).toEqual({ campaign_id: "banner-1", action_type: "cancel" });
+  it("MTC-11: auto-claims the delivered plan, shows the success popup and never reports cancellation", async () => {
+    // 登录态下含 claim_zcode_plan 的投放自动领取，无需点击 banner。
+    await byId("cloud-content-dialog").waitForDisplayed({ timeout: 20_000 });
+    expect(await byId("cloud-content-dialog").getText()).toContain("E2E claim succeeded");
+    const state = await ledger();
+    expect(
+      state.requestDetails.filter((request) => request.path === "/api/v1/zcode-plan/billing/claim"),
+    ).toHaveLength(1);
+    // 只有成功才上报 confirm；客户端已不再上报 cancel。
+    expect(state.events.map((event) => event.action_type)).toEqual(["confirm"]);
+    // 领取成功后服务端不再投放，banner 随刷新撤下；confirm 已入账，主动触发一次查询避免等 30s 轮询。
+    await browser.execute(() => window.dispatchEvent(new Event("online")));
+    await byId("marketing-banner").waitForExist({ reverse: true, timeout: 20_000 });
+    await byId("cloud-content-dialog").$('[data-slot="dialog-close"]').click();
+    await byId("cloud-content-dialog").waitForExist({ reverse: true });
+    expect((await ledger()).events.map((event) => event.action_type)).toEqual(["confirm"]);
   });
-  it("MTC-07/08: reopens and reports the same independent popup only after server redelivery", async () => {
+  it("MTC-12: auto-claims a popup delivery without opening the dialog", async () => {
+    const response = await fetch(`${origin()}/__e2e/marketing/action-delivery`, {
+      method: "POST",
+      body: JSON.stringify({
+        type: "claim_zcode_plan",
+        args: { plan_id: "weekend-plan-e2e" },
+      }),
+    });
+    const { campaignId } = (await response.json()) as { campaignId: string };
+    await browser.execute(() => window.dispatchEvent(new Event("online")));
+    await browser.waitUntil(
+      async () => {
+        const current = await ledger();
+        return (
+          current.requestDetails.some(
+            (request) => request.path === "/api/v1/zcode-plan/billing/claim",
+          ) &&
+          current.events.some((event) => event.campaign_id === campaignId)
+        );
+      },
+      { timeout: 20_000 },
+    );
+    // popup 自动领取在弹窗展示前完成，成功后服务端消费投放，弹窗不应打开。
+    expect(await byId("cloud-content-dialog").isExisting()).toBe(false);
+    expect(
+      (await ledger()).events
+        .filter((event) => event.campaign_id === campaignId)
+        .map((event) => event.action_type),
+    ).toEqual(["confirm"]);
+  });
+  it("MTC-07/08: reopens the same independent popup only after server redelivery without reporting", async () => {
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15000 });
     await byId("cloud-dialog-action").click();
-    await browser.waitUntil(async () => (await ledger()).events.length === 1);
+    await byId("cloud-content-dialog").waitForExist({ reverse: true });
+    expect((await ledger()).events).toEqual([]);
     await fetch(`${origin()}/__e2e/marketing/redeliver-popup`, { method: "POST" });
     await browser.execute(() => window.dispatchEvent(new Event("online")));
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15_000 });
     expect(await byId("cloud-content-dialog").getText()).toContain("E2E independent popup");
     await byId("cloud-dialog-action").click();
     await byId("cloud-content-dialog").waitForExist({ reverse: true });
-    await browser.waitUntil(async () => (await ledger()).events.length === 2);
-    expect((await ledger()).events[1]).toEqual({
-      campaign_id: "independent",
-      action_type: "cancel",
-    });
+    expect((await ledger()).events).toEqual([]);
   });
-  it("MTA-01: copies exact plaintext repeatedly, retains popup and reports close separately", async () => {
+  it("MTA-01: copies exact plaintext repeatedly, retains popup and never reports close", async () => {
     const baseline = (await ledger()).events.length;
     const text = "  <b>E2E copy</b>\nsecond line  ";
     await deliverAction({ type: "copy_text", args: { text } });
@@ -727,11 +746,10 @@ describe("Marketing Touch delivery", () => {
     await button.click();
     await browser.waitUntil(async () => (await ledger()).events.length === baseline + 2);
     await byId("cloud-content-dialog").$("button=Close campaign").click();
-    await browser.waitUntil(async () => (await ledger()).events.length === baseline + 3);
+    await byId("cloud-content-dialog").waitForExist({ reverse: true });
     expect((await ledger()).events.slice(baseline).map((event) => event.action_type)).toEqual([
       "confirm",
       "confirm",
-      "cancel",
     ]);
   });
   it("MTA-02: navigates to appearance before closing and confirming", async () => {
@@ -910,7 +928,6 @@ describe("Marketing Touch delivery", () => {
   for (const closeBeforeLate of [false, true]) {
     it(`MTE-13 clipboard timeout closed=${closeBeforeLate}: ignores late success`, async () => {
       await deliverAction({ type: "copy_text", args: { text: "E2E deferred clipboard" } });
-      const campaignId = currentActionCampaignId;
       await browser.execute(() => {
         const target = window as typeof window & {
           e2eResolveCopy?: () => void;
@@ -944,7 +961,6 @@ describe("Marketing Touch delivery", () => {
         if (closeBeforeLate) {
           await popup.$('[data-slot="dialog-close"]').click();
           await popup.waitForExist({ reverse: true });
-          await browser.waitUntil(async () => (await ledger()).events.length === 1);
         }
         await browser.executeAsync((done) => {
           (window as typeof window & { e2eResolveCopy?: () => void }).e2eResolveCopy?.();
@@ -957,11 +973,10 @@ describe("Marketing Touch delivery", () => {
           expect(await popup.$('[role="alert"]').isDisplayed()).toBe(true);
           expect((await ledger()).events).toEqual([]);
           await popup.$('[data-slot="dialog-close"]').click();
-          await browser.waitUntil(async () => (await ledger()).events.length === 1);
+          await popup.waitForExist({ reverse: true });
         }
-        expect((await ledger()).events).toEqual([
-          { campaign_id: campaignId, action_type: "cancel" },
-        ]);
+        // 超时后迟到成功与关闭都只影响本地，绝不补报 cancel。
+        expect((await ledger()).events).toEqual([]);
         expect(
           await browser.execute(
             () => (window as typeof window & { e2eCopyCalls?: number }).e2eCopyCalls,
@@ -1179,21 +1194,27 @@ describe("Marketing Touch delivery", () => {
       action_type: "confirm",
     });
     await bannerClose().click();
-    await browser.waitUntil(async () => (await ledger()).events.length === baseline + 2);
-    expect((await ledger()).events[baseline + 1]).toEqual({
-      campaign_id: campaignId,
-      action_type: "cancel",
-    });
-    // release 完成后旧 iframe URL 失效；只观测已分配 lease，不访问任意本机资源。
-    await browser.waitUntil(async () => (await fetch(leaseUrl)).status === 404);
+    // 关闭不再移除投放：banner 及其 iframe 资源必须保留，未领取成功的投放常驻。
+    await byId("marketing-banner").waitForDisplayed();
+    expect(await byId("marketing-banner").$("iframe").getAttribute("src")).toBe(leaseUrl);
+    expect((await ledger()).events.length).toBe(baseline + 1);
+    expect((await ledger()).events.some((event) => event.action_type === "cancel")).toBe(false);
+    // 未释放的 lease 仍可访问；只观测已分配 lease，不访问任意本机资源。
+    expect((await fetch(leaseUrl)).status).toBe(200);
     expect((await ledger()).requests.filter((p) => p.endsWith("hero.zip"))).toHaveLength(
       downloads + 1,
     );
     // 冷加载之后重新下发同 SHA；独立 case 自己建立热缓存，不依赖前例领取结果。
     await fetch(`${origin()}/__e2e/marketing/bundle-banner`, { method: "POST" });
     await browser.execute(() => window.dispatchEvent(new Event("online")));
-    await byId("marketing-banner").waitForDisplayed({ timeout: 15000 });
-    expect(await byId("marketing-banner").$("iframe").getAttribute("data-status")).toBe("ready");
+    // 新投放替换旧候选时才释放旧 lease：此时旧 iframe URL 必须失效。
+    await browser.waitUntil(
+      async () =>
+        (await byId("marketing-banner").$("iframe").getAttribute("src")) !== leaseUrl &&
+        (await byId("marketing-banner").$("iframe").getAttribute("data-status")) === "ready",
+      { timeout: 15_000 },
+    );
+    await browser.waitUntil(async () => (await fetch(leaseUrl)).status === 404);
     expect(await cacheSnapshot()).toEqual(coldCache);
     expect((await ledger()).requests.filter((p) => p.endsWith("hero.zip"))).toHaveLength(
       downloads + 1,
@@ -1213,7 +1234,7 @@ describe("Marketing Touch delivery", () => {
         ],
       }),
     });
-    const { campaignId } = (await response.json()) as { campaignId: string };
+    await response.json();
     await browser.execute(() => window.dispatchEvent(new Event("online")));
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15000 });
     expect(await byId("cloud-content-dialog").$("h2 b.underline").getText()).toBe("Rich title");
@@ -1250,11 +1271,9 @@ describe("Marketing Touch delivery", () => {
       Array.from({ length: 4 }, () => ({ overflow: false, inherited: true })),
     );
     await byId("cloud-dialog-action").$("strong").click();
-    await browser.waitUntil(async () =>
-      (await ledger()).events.some(
-        (e) => e.campaign_id === campaignId && e.action_type === "cancel",
-      ),
-    );
+    await byId("cloud-content-dialog").waitForExist({ reverse: true });
+    // 关闭富文本弹窗同样不产生 cancel 上报。
+    expect((await ledger()).events).toEqual([]);
 
     // 素材契约只接受 MP4；在 Electron 内生成，不能用 WebM 绕过宿主格式校验。
     const video = await browser.executeAsync((done: (value: string) => void) => {
@@ -1373,7 +1392,7 @@ describe("Marketing Touch delivery", () => {
         '<p class="text-center text-ui-base/relaxed text-foreground-subtle remote-unknown" style="margin-top:8px;position:fixed"><b class="font-semibold text-foreground">GLM-5.3-Flash</b> 将于 <span class="whitespace-nowrap font-semibold text-foreground underline decoration-foreground-subtle decoration-dashed underline-offset-4">2026年9月12日 00:00</span> 生效。</p><p class="font-semibold" style="font-weight:400;color:var(--color-foreground);line-height:1.5">Inline style</p>',
       ),
     });
-    const { campaignId } = (await response.json()) as { campaignId: string };
+    await response.json();
     await browser.execute(() => window.dispatchEvent(new Event("online")));
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15000 });
     const originalClass = await browser.execute(() => document.documentElement.className);
@@ -1455,10 +1474,8 @@ describe("Marketing Touch delivery", () => {
     }
     expect((await ledger()).events.length).toBe(baseline);
     await byId("cloud-content-dialog").$("button=Close campaign").click();
-    await browser.waitUntil(async () => (await ledger()).events.length === baseline + 1);
-    expect((await ledger()).events[baseline]).toEqual({
-      campaign_id: campaignId,
-      action_type: "cancel",
-    });
+    await byId("cloud-content-dialog").waitForExist({ reverse: true });
+    // 关闭不产生事件：样式验收后的收尾同样受"仅成功/1003 才撤下"约束。
+    expect((await ledger()).events.length).toBe(baseline);
   });
 });

@@ -90,37 +90,34 @@ describe("Marketing Touch anonymous boundaries", () => {
     await browser.electron.restoreAllMocks();
     await clearAppData();
   });
-  it("MTE-08 anonymous popup: queries and reports cancellation without Authorization", async () => {
+  it("MTE-08 anonymous popup: queries without reporting cancellation without Authorization", async () => {
     await byId("cloud-content-dialog").waitForDisplayed({ timeout: 15_000 });
     await byId("cloud-content-dialog").$('[data-slot="dialog-close"]').click();
     await byId("cloud-content-dialog").waitForExist({ reverse: true });
-    await browser.waitUntil(async () => (await state()).events.length === 1);
     const ledger = await state();
-    expect(ledger.events).toEqual([{ campaign_id: "independent", action_type: "cancel" }]);
+    // 关闭只做本地隐藏，绝不向服务端上报 cancel（否则下次投放清单会被清空）。
+    expect(ledger.events).toEqual([]);
     const requests = ledger.requestDetails.filter((request) =>
       request.path.startsWith("/api/v1/marketing/touch"),
     );
     expect(requests.some((request) => request.method === "GET")).toBe(true);
-    expect(requests.filter((request) => request.method === "POST")).toHaveLength(1);
+    expect(requests.filter((request) => request.method === "POST")).toHaveLength(0);
     expect(requests.every((request) => !request.headers.authenticated)).toBe(true);
   });
-  it("MTE-05 anonymous banner: closes normally and opens login instead of submitting a claim", async () => {
+  it("MTE-05 anonymous banner: close keeps the banner and open asks for login instead of claiming", async () => {
     const banner = byId("marketing-banner");
     await banner.waitForDisplayed({ timeout: 15_000 });
     // 空文案 fixture 使用 App 的本地化回退名称，不能只匹配英文。
     await banner.$('button[aria-label="Close"], button[aria-label="关闭"]').click();
-    await banner.waitForExist({ reverse: true });
-    await browser.waitUntil(async () => (await state()).events.length === 1);
+    // 关闭按钮不再移除投放：未领取成功的 banner 必须常驻，等 React 完成一次渲染后仍可见。
+    await browser.pause(300);
+    expect(await banner.isDisplayed()).toBe(true);
     const closed = await state();
-    expect(closed.events).toEqual([{ campaign_id: "banner-1", action_type: "cancel" }]);
+    // 关闭不上报 cancel，也不产生任何 action。
+    expect(closed.events).toEqual([]);
     expect(
-      closed.requestDetails
-        .filter((request) => request.path.endsWith("/touch/action"))
-        .every((request) => !request.headers.authenticated),
-    ).toBe(true);
-    await fetch(`${origin()}/__e2e/marketing/redeliver-banner`, { method: "POST" });
-    await browser.execute(() => window.dispatchEvent(new Event("online")));
-    await banner.waitForDisplayed({ timeout: 15_000 });
+      closed.requestDetails.filter((request) => request.path.endsWith("/touch/action")),
+    ).toHaveLength(0);
     await banner.$('button[aria-label="Open"], button[aria-label="打开"]').click();
     await byId(TID_LOGIN_USE_API_KEY_BUTTON).waitForDisplayed({ timeout: 15_000 });
     const after = await state();

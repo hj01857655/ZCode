@@ -394,6 +394,16 @@ export async function createMarketingTouchFixture() {
           claimFailure = null;
           return true;
         }
+        // 领取成功判据是 code===0 且 data.plan 存在；缺 plan 会被服务层判成失败。
+        json({
+          code: 0,
+          msg: "",
+          data: {
+            server_time: Math.floor(Date.now() / 1000),
+            plan: { plan_id: "weekend-plan-e2e", name: "E2E Weekend", entitlements: [] },
+          },
+        });
+        return true;
       }
       return false;
     },

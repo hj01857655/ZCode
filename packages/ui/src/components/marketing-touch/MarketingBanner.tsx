@@ -17,7 +17,6 @@ interface MarketingBannerProps {
   pendingLabel: string;
   pending: boolean;
   onClick: () => void;
-  onClose: () => void;
 }
 
 export function MarketingBannerView(props: MarketingBannerProps) {
@@ -108,15 +107,14 @@ function MarketingBannerContent(props: MarketingBannerProps) {
           <span className="sr-only">{props.pendingLabel}</span>
         </span>
       ) : props.hasClose ? (
+        // 关闭按钮保留但不再移除投放：未领取成功的 banner 必须常驻，
+        // 点击只阻断冒泡（避免误触发领取动作），不改变可见性、也不上报 cancel。
         <Button
           type="button"
           variant="ghost"
           size="icon-xs"
           aria-label={props.closeLabel}
-          onClick={(event) => {
-            event.stopPropagation();
-            props.onClose();
-          }}
+          onClick={(event) => event.stopPropagation()}
           className="absolute right-2.5 top-2.5 rounded-full text-foreground-subtle hover:bg-hover hover:text-foreground focus-visible:ring-foreground/50"
         >
           <XIcon aria-hidden="true" />

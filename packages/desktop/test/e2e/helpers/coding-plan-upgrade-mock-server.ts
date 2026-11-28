@@ -1044,6 +1044,10 @@ function enrichClientConfigPayloadForUpgradeE2E(
   payload: CodingPlanClientConfigFixture,
   scenario: CodingPlanUpgradeMockScenario,
 ) {
+  // 营销自动领取在夹具里必须跳过阿里云验证码：E2E 无外网且不加载真实 SDK，
+  // 缺 captcha 配置会被服务层判成 invalid 而直接领取失败。
+  const configs = payload.data.configs as Record<string, unknown>;
+  configs.captcha ??= { enabled: false };
   if (scenario === "manual-claim-experience") {
     // Bug 原因：领取 fixture 需要同时下发 Individual 与 Start；且 BigModel OAuth
     // resolver 会从同 family 的远端列表选择首个 Anthropic provider，Individual 必须排在前面，

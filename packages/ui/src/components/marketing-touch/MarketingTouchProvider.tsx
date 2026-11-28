@@ -74,6 +74,9 @@ export function MarketingTouchProvider({
   const upgradeTargetRef = useRef(upgradeTargetProviderId);
   upgradeTargetRef.current = upgradeTargetProviderId;
   const user = useZCodeStore((state) => state.user);
+  // 自动领取的登录态判断走 ref：runtime 创建回调只依赖 Boolean(user)，不引入整对象依赖。
+  const userRef = useRef(user);
+  userRef.current = user;
   const restoring = useZCodeStore((state) => state.isRestoringOAuthSession);
   const requestLogin = useZCodeStore((state) => state.requestLoginEntry);
   const openRewards = useOpenRewards();
@@ -99,6 +102,8 @@ export function MarketingTouchProvider({
       report: (input) => service.report(input),
       locale,
       canOpen: canOpenMarketingPopup,
+      // 未登录时领取动作会切到登录引导，不能自动触发。
+      canAutoClaim: () => Boolean(userRef.current),
       refresh: () => poller.refresh(),
       prepare: async (delivery) => {
         const assets = services.cloudContentService;
@@ -269,14 +274,33 @@ export function MarketingTouchProvider({
             ...proof,
           });
           signal.throwIfAborted();
-          if (!result.success)
+          if (!result.success) {
+            // 1003=已领取：语义是"已拥有"，不是可重试失败——撤下投放并静默对账，
+            // 不抛失败弹窗，也不当作常驻投放。
+            if (result.code === 1003) {
+              void Promise.allSettled([
+                refreshStartEntitlementRef.current({
+                  force: true,
+                  silent: true,
+                  reason: "purchase",
+                }),
+                services.providerSettingsService.refresh("marketing-plan-claim"),
+              ]).then((results) => {
+                if (results.some((value) => value.status === "rejected"))
+                  logger.warn("[marketing-touch] already-claimed reconcile refresh failed");
+              });
+              return { status: "failure", code: result.code, alreadyClaimed: true, message: "" };
+            }
+            // 其它失败/不确定一律保留投放：Controller 不撤下 banner/popup、不报 cancel，
+            // 让用户可重试。只有成功与 1003 会撤下投放。
             return {
               status: "failure",
-              terminal: [1001, 1002, 1003, 1004, 1005].includes(result.code),
+              code: result.code,
               message: result.message?.trim()
                 ? result.message
                 : intl.formatMessage({ id: "manualClaimPlan.claim.failure.generic" }),
             };
+          }
           // 成功已由 claim 确定，后置刷新失败只影响本地权益投影，不能逆转领取结果。
           void Promise.allSettled([
             refreshStartEntitlementRef.current({ force: true, silent: true, reason: "purchase" }),
@@ -365,6 +389,7 @@ export function MarketingBanner() {
 }
 function ConnectedBanner({ controller }: { controller: MarketingTouchController }) {
   const state = useStore(controller.store);
+  const services = useServices();
   const { dark } = useCloudHeroEnvironment();
   const { intl, locale } = useZCodeIntl();
   const banner = state.banner;
@@ -375,6 +400,7 @@ function ConnectedBanner({ controller }: { controller: MarketingTouchController 
       banner.delivery.banner.buttons.find((button) => button.action.type !== "close")?.action
         .type === "claim_zcode_plan",
     ),
+    services.codingPlanSubscriptionService,
   );
   // 与仲裁层（SidebarBottomActivity）共用同一可见性谓词，避免两处判断漂移。
   if (!isMarketingBannerRenderable(banner)) return null;
@@ -400,9 +426,6 @@ function ConnectedBanner({ controller }: { controller: MarketingTouchController 
       pendingLabel={intl.formatMessage({ id: `marketingTouch.${state.phase}` })}
       onClick={() => {
         void controller.clickBanner().catch(() => logger.warn("[marketing-touch] action failed"));
-      }}
-      onClose={() => {
-        void controller.closeBanner();
       }}
     />
   );

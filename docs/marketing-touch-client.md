@@ -32,6 +32,37 @@ iframe ready 前不发 hover；ready 后同步当前值。减少动态效果时�
 
 验证：先以真实 Electron 复现成功路径出现 `Action succeeded` toast（`desktop-e2e-20260914-092917-468`），失败路径无 toast；移除后 `desktop-e2e-20260914-093051-737` 两项通过（11 秒、runner exit 0）。相关单测 35/35、typecheck、typecheck:e2e、lint（46 既有 warnings / 0 errors）、architecture（0 violations）通过。未验证真实生产接口、Windows/Linux 和手机实机。
 
+### 领取未成功时保留投放、关闭不再上报 cancel（2026-11-27）
+
+规则：**投放过的、领取未成功的 banner/popup 必须一直存在；客户端不允许上报 cancel。**
+
+- 只有两种结果会撤下投放：领取成功（`code=0` 且有 `data.plan`），以及 `1003` 已领取（视为已拥有，撤下并静默对账权益）。
+- 其余一律保留投放可重试：`1001/1002/1004/1005`、`3001/3007`、网络失败、结果不确定（`uncertain`）。Controller 在这些分支不再 `invalidate` 撤 banner、不再把错误当作终局；**轮询查询失败/超时也不再撤 banner**（删除旧的"失败超过 10 分钟移除 banner"逻辑），网络抖动只保留最近内容等下一轮。
+- 仍会移除 banner 的仅限：领取成功、`1003`、服务端下一次不再下发该条（撤回/过期）、runtime 销毁。失败/网络错误不在其列。
+- banner 的关闭按钮保留显示，但点击为 no-op：只 `stopPropagation`（避免误触发整图动作），**不隐藏、不移除投放、不上报**。未领取成功的 banner 必须常驻。
+- 居中弹窗（含领取失败后恢复出来的原弹窗）仍可关闭，关闭只做本地隐藏，**不调用 `report({action_type:"cancel"})`**；下一轮轮询服务端若仍投放会重新出现。`confirm` 上报保持不变。
+
+```text
+claim 结果 → 成功        → 撤下投放 + confirm + 刷新权益
+          → 1003 已领    → 撤下投放 + 静默刷新权益（不 confirm）
+          → 其它失败/不确定 → 保留投放 + 失败弹窗；banner close 为 no-op，不报 cancel
+```
+
+### 自动领取与验证码形态（2026-11-27）
+
+规则：**登录态收到含 `claim_zcode_plan` 的投放后，客户端自动发起领取，无需用户点击。**
+
+- 触发点：维护性轮询 `refresh()` 结束后，对当前 banner 与待展示 popup 各尝试一次（banner 要求当前无弹窗且 `canOpen()`；popup 不要求可见）。未登录不自动领取——领取动作在未登录时的语义是引导登录。
+- 幂等：以 `scope + resource_position + campaign_id` 为 key，每个投放只自动尝试一次。失败/中止后不自动重试，保留投放和失败提示，交给用户手动点击；不要用轮询反复触发验证码。
+- 验证码接口：与 4.0.0 发行版一致，使用 `initAliyunCaptcha` 的 `getInstance / success / fail / onError`，**不使用旧接口 `captchaVerifyCallback`**。实例就绪后先调 `startTracelessVerification()`：无风险时 SDK 直接回调 `success(captchaVerifyParam)`；命中风控（`success=true && verifyResult=false && verifyCode F015/空`）时 SDK 自行升级为滑块/拼图弹窗，用户手动完成后仍由 `success` 返回参数。实例不支持无痕时才点击隐藏按钮走交互式。客户端只负责触发与等待，绝不伪造验证结果。
+- 失败分流：`fail` 携带 `captchaVerifyParam`（`T006`/终态通过）直接采用；`F008` 视为重复提交，丢弃实例后失败；`F015` 等无痕未过事件继续等 SDK 升级交互；`success` 已结算后的迟到 `fail` 直接丢弃，不能命中下一轮。同一 scene 连续得到相同 `certifyId` 只告警、不阻断，是否重复由服务端判定。`onError`（初始化/网络）必须解除等待，不能留下永久 pending。
+- 验证头：proof 返回 `captchaVerifyParam`，配置有 `region` 时同时带 `captchaRegion`，由服务层拼成 `X-Aliyun-Captcha-Verify-Param` / `X-Aliyun-Captcha-Verify-Region`。
+- 语言与 logo：弹窗语言读 `localStorage['zcode-locale-preference']`（`zh-CN → cn`，其它非 `system` 偏好 → `en`，否则按 `navigator.language`）；`captchaLogoImg` 固定使用发行版内置的 ZCode 64×64 logo，不随主题变化。
+- 超时与并发：脚本加载 10s、实例等待 10s、整体验证 120s。验证走全局串行队列（自动领取与模型请求共用）：后到的请求排队等待，不直接失败；每个 attempt 结束（成功/失败/超时/取消）后丢弃 SDK 实例，下一轮重新初始化，避免复用上一轮残留的弹窗状态。SDK 等待与验证都挂在调用方 `AbortSignal` 上，账号切换/请求取消立即解除。脚本刚落地时补足 2s 再触发，避免 SDK 内部初始化未完成就发起验证。
+- SDK 加载与预热：Banner 出现可领取动作且已登录时，取验证配置后完成脚本加载与 `initAliyunCaptcha` 实例初始化（只初始化、不触发无痕验证）；实例复用窗口 12 分钟，配置变化或超时后重建并清空宿主 DOM。验证配置读取有 60s 缓存与 in-flight 去重，领取/预热/模型请求共用。预热期间已有验证在跑时跳过重建；上一次 `init` 尚未返回时，下一次重建先等待其完成（≤10s）。脚本加载失败会移除 script 节点，下一次重新挂载。预热失败不影响领取，正式领取会重试。
+- 模型请求验证（`model-request` / `captcha-retry`）：桌面窗口为每个打开的 workspace tab 常驻一个应答方（身份 key 去重、`rpcReady` 后才订阅），订阅 Host 的 workspace 级请求/取消事件；只有 `start-plan` 账号才执行验证码，配置 `enabled:false` / `skipModelRequest` 一律回空 headers。同一 `workspace::session::requestId` 只处理一次（合并重复投递），取消时中止验证且不应答。应答方与正在展示的 pane 解耦，web 远控新建会话同样有应答方。
+- 成功仍走 `success_popup`（banner）或静默关闭（popup），并上报 `confirm`；失败/不确定保留投放可重试。
+
 ### 服务端协议对齐（2026-09-12）
 
 依据用户提供的 `marketing_touch_design.md` §7.3.1，营销 Banner background 与 Popup hero 仅接受 `image / video / bundle`。撤回未约定的 `lottie`、`lottie.dark` 和播放参数接入，不把客户端自定义字段当成服务端能力。已有通用 Lottie 播放器保留，但不接入营销投放。未支持的视觉类型按既有单条投放拒绝规则处理，不影响同批其他合法投放；轮询、资源缓存、关闭及上报保持不变。此前 Lottie mock 测试仅证明自定义客户端链路，不代表服务端支持。
