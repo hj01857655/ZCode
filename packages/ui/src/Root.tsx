@@ -15,7 +15,6 @@ import { RemoteProjectPresentationProvider } from "@/hooks/RemoteProjectPresenta
 import {
   RequestSecurityHost,
   RequestSecurityWorkspaceBridge,
-  setRequestSecurityReporter,
 } from "@/request-security-edition/index.js";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LucideProvider, RefreshCw } from "lucide-react";
@@ -231,7 +230,6 @@ function RootInner({
   const credentialRecovery = useCredentialStoreRecovery(isDesktop === true);
   useInterfaceModeTelemetry(platform, isDesktop === true);
   useEffect(() => {
-    setRequestSecurityReporter(platform);
     setMcpStorePlatform(platform);
     // 对话 UI perf 只属于 desktop-continuous；Web/mobile 即使能看到权威状态也不装 reporter。
     setUiPerfArmsReporter(isDesktop ? platform : null);
@@ -239,7 +237,6 @@ function RootInner({
     // 发送漏斗同理：只在 Electron 桌面端上报，Web/mobile 的 reportArmsCustomEvent 是空实现。
     setSendFunnelArmsReporter(isDesktop ? platform : null);
     return () => {
-      setRequestSecurityReporter(null);
       setMcpStorePlatform(null);
       setUiPerfArmsReporter(null);
       setSessionOpenArmsReporter(null);

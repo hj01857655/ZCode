@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from "react";
-import type { IPlatformService } from "@zcode/shared";
 import type { RequestSecurityWorkspaceTab } from "@/request-security.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import { subscribeProviderRuntimeHeaders } from "./provider-headers.js";
@@ -93,15 +92,3 @@ function WorkspaceProviderRuntimeHeadersResponder({ tab }: { tab: RequestSecurit
   return null;
 }
 
-/** 当前注册的 reporter（desktop platform 或 null）。 */
-let activeReporter: IPlatformService | null = null;
-
-/** reporter 注册（发行版 setRequestSecurityReporter 语义：desktop 注册、Web/mobile 注销）。 */
-export function setRequestSecurityReporter(reporter: IPlatformService | null): void {
-  activeReporter = reporter;
-}
-
-/** 供 claim.ts / diagnostics 读取当前 reporter 上报诊断事件。 */
-export function getRequestSecurityReporter(): IPlatformService | null {
-  return activeReporter;
-}
